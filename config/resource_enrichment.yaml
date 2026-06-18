@@ -1,0 +1,258 @@
+# Azure Resource Enrichment Configuration
+# Defines which properties to promote to named columns per resource type.
+# Resources WITHOUT enrichment rules are still captured with their raw
+# 'properties' blob in the AllResources sheet — nothing is silently dropped.
+
+resource_types:
+
+  "microsoft.compute/virtualmachines":
+    display_name: "Virtual Machines"
+    promoted_fields:
+      - path: "properties.hardwareProfile.vmSize"
+        column: "vm_size"
+      - path: "properties.storageProfile.osDisk.osType"
+        column: "os_type"
+      - path: "properties.storageProfile.osDisk.diskSizeGB"
+        column: "os_disk_size_gb"
+      - path: "properties.osProfile.computerName"
+        column: "computer_name"
+      - path: "properties.diagnosticsProfile.bootDiagnostics.enabled"
+        column: "boot_diagnostics_enabled"
+      - path: "properties.provisioningState"
+        column: "provisioning_state"
+      - path: "identity.type"
+        column: "managed_identity"
+
+  "microsoft.storage/storageaccounts":
+    display_name: "Storage Accounts"
+    promoted_fields:
+      - path: "properties.allowBlobPublicAccess"
+        column: "allow_blob_public_access"
+      - path: "properties.enableHttpsTrafficOnly"
+        column: "https_only"
+      - path: "properties.minimumTlsVersion"
+        column: "min_tls_version"
+      - path: "properties.publicNetworkAccess"
+        column: "public_network_access"
+      - path: "properties.encryption.requireInfrastructureEncryption"
+        column: "infrastructure_encryption"
+      - path: "kind"
+        column: "account_kind"
+
+  "microsoft.keyvault/vaults":
+    display_name: "Key Vaults"
+    promoted_fields:
+      - path: "properties.enableSoftDelete"
+        column: "soft_delete_enabled"
+      - path: "properties.enablePurgeProtection"
+        column: "purge_protection_enabled"
+      - path: "properties.softDeleteRetentionInDays"
+        column: "soft_delete_retention_days"
+      - path: "properties.enableRbacAuthorization"
+        column: "rbac_authorization"
+      - path: "properties.publicNetworkAccess"
+        column: "public_network_access"
+      - path: "properties.sku.name"
+        column: "sku"
+
+  "microsoft.compute/disks":
+    display_name: "Managed Disks"
+    promoted_fields:
+      - path: "properties.diskSizeGB"
+        column: "disk_size_gb"
+      - path: "properties.diskState"
+        column: "disk_state"
+      - path: "properties.encryption.type"
+        column: "encryption_type"
+      - path: "properties.networkAccessPolicy"
+        column: "network_access_policy"
+      - path: "properties.osType"
+        column: "os_type"
+      - path: "sku.name"
+        column: "sku"
+
+  "microsoft.network/virtualnetworks":
+    display_name: "Virtual Networks"
+    promoted_fields:
+      - path: "properties.addressSpace.addressPrefixes"
+        column: "address_prefixes"
+      - path: "properties.enableDdosProtection"
+        column: "ddos_protection"
+      - path: "properties.provisioningState"
+        column: "provisioning_state"
+
+  "microsoft.network/networksecuritygroups":
+    display_name: "Network Security Groups"
+    promoted_fields:
+      - path: "properties.provisioningState"
+        column: "provisioning_state"
+
+  "microsoft.web/sites":
+    display_name: "App Services"
+    promoted_fields:
+      - path: "properties.state"
+        column: "state"
+      - path: "properties.httpsOnly"
+        column: "https_only"
+      - path: "properties.clientCertEnabled"
+        column: "client_cert_enabled"
+      - path: "properties.siteConfig.minTlsVersion"
+        column: "min_tls_version"
+      - path: "properties.siteConfig.ftpsState"
+        column: "ftps_state"
+      - path: "identity.type"
+        column: "managed_identity"
+
+  "microsoft.sql/servers":
+    display_name: "SQL Servers"
+    promoted_fields:
+      - path: "properties.administratorLogin"
+        column: "admin_login"
+      - path: "properties.fullyQualifiedDomainName"
+        column: "fqdn"
+      - path: "properties.minimalTlsVersion"
+        column: "min_tls_version"
+      - path: "properties.publicNetworkAccess"
+        column: "public_network_access"
+      - path: "properties.version"
+        column: "version"
+
+  "microsoft.sql/servers/databases":
+    display_name: "SQL Databases"
+    promoted_fields:
+      - path: "properties.status"
+        column: "status"
+      - path: "properties.edition"
+        column: "edition"
+      - path: "properties.maxSizeBytes"
+        column: "max_size_bytes"
+      - path: "sku.name"
+        column: "sku"
+      - path: "sku.tier"
+        column: "tier"
+
+  "microsoft.containerservice/managedclusters":
+    display_name: "AKS Clusters"
+    promoted_fields:
+      - path: "properties.kubernetesVersion"
+        column: "k8s_version"
+      - path: "properties.provisioningState"
+        column: "provisioning_state"
+      - path: "properties.networkProfile.networkPlugin"
+        column: "network_plugin"
+      - path: "properties.networkProfile.networkPolicy"
+        column: "network_policy"
+      - path: "properties.enableRBAC"
+        column: "rbac_enabled"
+      - path: "identity.type"
+        column: "managed_identity"
+
+  "microsoft.documentdb/databaseaccounts":
+    display_name: "Cosmos DB"
+    promoted_fields:
+      - path: "properties.databaseAccountOfferType"
+        column: "offer_type"
+      - path: "properties.enableAutomaticFailover"
+        column: "auto_failover"
+      - path: "properties.enableMultipleWriteLocations"
+        column: "multi_write"
+      - path: "properties.publicNetworkAccess"
+        column: "public_network_access"
+
+  "microsoft.network/applicationgateways":
+    display_name: "Application Gateways"
+    promoted_fields:
+      - path: "properties.operationalState"
+        column: "operational_state"
+      - path: "sku.name"
+        column: "sku"
+      - path: "sku.tier"
+        column: "tier"
+      - path: "properties.sslPolicy.minProtocolVersion"
+        column: "min_ssl_version"
+
+  "microsoft.network/loadbalancers":
+    display_name: "Load Balancers"
+    promoted_fields:
+      - path: "sku.name"
+        column: "sku"
+      - path: "properties.provisioningState"
+        column: "provisioning_state"
+
+  "microsoft.cache/redis":
+    display_name: "Azure Cache for Redis"
+    promoted_fields:
+      - path: "properties.redisVersion"
+        column: "redis_version"
+      - path: "properties.enableNonSslPort"
+        column: "non_ssl_port_enabled"
+      - path: "properties.minimumTlsVersion"
+        column: "min_tls_version"
+      - path: "properties.publicNetworkAccess"
+        column: "public_network_access"
+      - path: "sku.name"
+        column: "sku"
+
+  "microsoft.insights/components":
+    display_name: "Application Insights"
+    promoted_fields:
+      - path: "properties.ApplicationId"
+        column: "application_id"
+      - path: "properties.WorkspaceResourceId"
+        column: "workspace_id"
+      - path: "properties.RetentionInDays"
+        column: "retention_days"
+
+  "microsoft.operationalinsights/workspaces":
+    display_name: "Log Analytics Workspaces"
+    promoted_fields:
+      - path: "properties.retentionInDays"
+        column: "retention_days"
+      - path: "properties.sku.name"
+        column: "sku"
+      - path: "properties.publicNetworkAccessForIngestion"
+        column: "public_ingestion"
+      - path: "properties.publicNetworkAccessForQuery"
+        column: "public_query"
+
+  "microsoft.recoveryservices/vaults":
+    display_name: "Recovery Services Vaults"
+    promoted_fields:
+      - path: "sku.name"
+        column: "sku"
+      - path: "properties.provisioningState"
+        column: "provisioning_state"
+
+  "microsoft.network/publicipaddresses":
+    display_name: "Public IP Addresses"
+    promoted_fields:
+      - path: "sku.name"
+        column: "sku"
+      - path: "properties.publicIPAllocationMethod"
+        column: "allocation_method"
+      - path: "properties.ipAddress"
+        column: "ip_address"
+
+  "microsoft.dbforpostgresql/flexibleservers":
+    display_name: "PostgreSQL Flexible Servers"
+    promoted_fields:
+      - path: "properties.version"
+        column: "version"
+      - path: "properties.network.publicNetworkAccess"
+        column: "public_network_access"
+      - path: "sku.name"
+        column: "sku"
+      - path: "sku.tier"
+        column: "tier"
+
+  "microsoft.dbformysql/flexibleservers":
+    display_name: "MySQL Flexible Servers"
+    promoted_fields:
+      - path: "properties.version"
+        column: "version"
+      - path: "properties.network.publicNetworkAccess"
+        column: "public_network_access"
+      - path: "sku.name"
+        column: "sku"
+      - path: "sku.tier"
+        column: "tier"

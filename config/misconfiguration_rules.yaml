@@ -1,0 +1,233 @@
+# Misconfiguration Detection Rules
+# All rules are based EXCLUSIVELY on official Microsoft Azure documentation,
+# the Azure Security Benchmark, and the Azure Well-Architected Framework.
+# Sources are linked in each rule's documentation_url field.
+#
+# Operator semantics:
+#   equals_true  -> finding raised when actual value is NOT true
+#   equals_false -> finding raised when actual value is NOT false
+#   equals       -> finding raised when actual value != expected_value
+#   not_equals   -> finding raised when actual value == expected_value (i.e., bad value is present)
+
+rules:
+
+  # ── Storage Accounts ─────────────────────────────────────────────────────────
+  - id: "STG-001"
+    resource_type: "microsoft.storage/storageaccounts"
+    condition_path: "enriched_https_only"
+    expected_value: true
+    operator: "equals_true"
+    severity: "High"
+    waf_pillar: "Security"
+    title: "Storage Account: HTTPS-only traffic not enforced"
+    description: "Enabling HTTPS-only traffic on storage accounts prevents data-in-transit exposure. Resources that accept HTTP traffic are vulnerable to man-in-the-middle attacks."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/storage/common/storage-require-secure-transfer"
+
+  - id: "STG-002"
+    resource_type: "microsoft.storage/storageaccounts"
+    condition_path: "enriched_allow_blob_public_access"
+    expected_value: false
+    operator: "equals_true"
+    severity: "High"
+    waf_pillar: "Security"
+    title: "Storage Account: Public blob access is allowed"
+    description: "Disabling anonymous public read access to containers and blobs prevents unauthorized access to sensitive data."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/storage/blobs/anonymous-read-access-configure"
+
+  - id: "STG-003"
+    resource_type: "microsoft.storage/storageaccounts"
+    condition_path: "enriched_min_tls_version"
+    expected_value: "TLS1_2"
+    operator: "equals"
+    severity: "Medium"
+    waf_pillar: "Security"
+    title: "Storage Account: Minimum TLS version below 1.2"
+    description: "Azure Storage should require clients to use TLS 1.2 or higher to send requests."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/storage/common/transport-layer-security-configure-minimum-version"
+
+  # ── Key Vault ─────────────────────────────────────────────────────────────────
+  - id: "KV-001"
+    resource_type: "microsoft.keyvault/vaults"
+    condition_path: "enriched_soft_delete_enabled"
+    expected_value: true
+    operator: "equals_true"
+    severity: "High"
+    waf_pillar: "Reliability"
+    title: "Key Vault: Soft delete is not enabled"
+    description: "Soft delete protects Key Vault and its objects from accidental or malicious deletion by retaining deleted items for a configurable period."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/key-vault/general/soft-delete-overview"
+
+  - id: "KV-002"
+    resource_type: "microsoft.keyvault/vaults"
+    condition_path: "enriched_purge_protection_enabled"
+    expected_value: true
+    operator: "equals_true"
+    severity: "High"
+    waf_pillar: "Reliability"
+    title: "Key Vault: Purge protection is not enabled"
+    description: "Purge protection prevents permanent deletion of Key Vault and its objects during the retention period, even by privileged users."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/key-vault/general/soft-delete-overview#purge-protection"
+
+  # ── App Service ───────────────────────────────────────────────────────────────
+  - id: "APP-001"
+    resource_type: "microsoft.web/sites"
+    condition_path: "enriched_https_only"
+    expected_value: true
+    operator: "equals_true"
+    severity: "High"
+    waf_pillar: "Security"
+    title: "App Service: HTTPS-only not enforced"
+    description: "Redirecting all HTTP traffic to HTTPS ensures all communication with the App Service is encrypted."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/app-service/configure-ssl-bindings#enforce-https"
+
+  - id: "APP-002"
+    resource_type: "microsoft.web/sites"
+    condition_path: "enriched_min_tls_version"
+    expected_value: "1.2"
+    operator: "equals"
+    severity: "Medium"
+    waf_pillar: "Security"
+    title: "App Service: Minimum TLS version is below 1.2"
+    description: "App Service should enforce TLS 1.2 as the minimum allowed version for incoming connections."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/app-service/configure-ssl-bindings#enforce-tls-versions"
+
+  - id: "APP-003"
+    resource_type: "microsoft.web/sites"
+    condition_path: "enriched_ftps_state"
+    expected_value: "FtpsOnly"
+    operator: "equals"
+    severity: "Medium"
+    waf_pillar: "Security"
+    title: "App Service: FTP deployment not restricted to FTPS"
+    description: "FTP access should be disabled or restricted to FTPS-only to avoid exposing credentials over plain FTP."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/app-service/deploy-ftp"
+
+  # ── SQL Server ────────────────────────────────────────────────────────────────
+  - id: "SQL-001"
+    resource_type: "microsoft.sql/servers"
+    condition_path: "enriched_public_network_access"
+    expected_value: "Disabled"
+    operator: "equals"
+    severity: "High"
+    waf_pillar: "Security"
+    title: "SQL Server: Public network access is enabled"
+    description: "Azure SQL Server public network access should be disabled. Use Private Endpoints for all connectivity."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/azure-sql/database/connectivity-settings"
+
+  - id: "SQL-002"
+    resource_type: "microsoft.sql/servers"
+    condition_path: "enriched_min_tls_version"
+    expected_value: "1.2"
+    operator: "equals"
+    severity: "Medium"
+    waf_pillar: "Security"
+    title: "SQL Server: Minimum TLS version below 1.2"
+    description: "Azure SQL Server should enforce TLS 1.2 or higher for all connections."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/azure-sql/database/connectivity-settings#minimal-tls-version"
+
+  # ── AKS ───────────────────────────────────────────────────────────────────────
+  - id: "AKS-001"
+    resource_type: "microsoft.containerservice/managedclusters"
+    condition_path: "enriched_rbac_enabled"
+    expected_value: true
+    operator: "equals_true"
+    severity: "High"
+    waf_pillar: "Security"
+    title: "AKS: Kubernetes RBAC is not enabled"
+    description: "Kubernetes RBAC provides granular access control to Kubernetes API resources and should be enabled on all AKS clusters."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/aks/concepts-identity#kubernetes-rbac"
+
+  # ── Redis Cache ───────────────────────────────────────────────────────────────
+  - id: "REDIS-001"
+    resource_type: "microsoft.cache/redis"
+    condition_path: "enriched_non_ssl_port_enabled"
+    expected_value: false
+    operator: "not_equals"
+    severity: "High"
+    waf_pillar: "Security"
+    title: "Redis Cache: Non-SSL port (6379) is enabled"
+    description: "The non-SSL Redis port should be disabled to enforce encrypted connections only."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/azure-cache-for-redis/cache-configure#access-ports"
+
+  - id: "REDIS-002"
+    resource_type: "microsoft.cache/redis"
+    condition_path: "enriched_min_tls_version"
+    expected_value: "1.2"
+    operator: "equals"
+    severity: "Medium"
+    waf_pillar: "Security"
+    title: "Redis Cache: Minimum TLS version below 1.2"
+    description: "Azure Cache for Redis should require TLS 1.2 as the minimum version."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/azure-cache-for-redis/cache-configure#access-ports"
+
+  # ── Storage (additional) ──────────────────────────────────────────────────────
+  - id: "STG-004"
+    resource_type: "microsoft.storage/storageaccounts"
+    condition_path: "enriched_public_network_access"
+    expected_value: "Disabled"
+    operator: "equals"
+    severity: "High"
+    waf_pillar: "Security"
+    title: "Storage Account: Public network access is not disabled"
+    description: "Public network access to Azure Storage should be disabled. Use Private Endpoints for all connectivity to prevent unauthorized access and reduce attack surface."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/storage/common/storage-network-security"
+
+  # ── Key Vault (additional) ────────────────────────────────────────────────────
+  - id: "KV-003"
+    resource_type: "microsoft.keyvault/vaults"
+    condition_path: "enriched_public_network_access"
+    expected_value: "Disabled"
+    operator: "equals"
+    severity: "High"
+    waf_pillar: "Security"
+    title: "Key Vault: Public network access is not disabled"
+    description: "Key Vault public network access should be disabled. Use Private Endpoints to restrict access to authorized virtual networks only."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/key-vault/general/network-security"
+
+  # ── Cosmos DB ─────────────────────────────────────────────────────────────────
+  - id: "COSMOS-001"
+    resource_type: "microsoft.documentdb/databaseaccounts"
+    condition_path: "enriched_public_network_access"
+    expected_value: "Disabled"
+    operator: "equals"
+    severity: "High"
+    waf_pillar: "Security"
+    title: "Cosmos DB: Public network access is not disabled"
+    description: "Azure Cosmos DB public network access should be disabled. Use Private Endpoints and configure the IP firewall to restrict access to known networks."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/cosmos-db/how-to-configure-firewall"
+
+  # ── Redis Cache (additional) ──────────────────────────────────────────────────
+  - id: "REDIS-003"
+    resource_type: "microsoft.cache/redis"
+    condition_path: "enriched_public_network_access"
+    expected_value: "Disabled"
+    operator: "equals"
+    severity: "High"
+    waf_pillar: "Security"
+    title: "Redis Cache: Public network access is not disabled"
+    description: "Azure Cache for Redis public network access should be disabled. Use Private Endpoints to prevent public internet exposure."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/azure-cache-for-redis/cache-private-link"
+
+  # ── PostgreSQL Flexible Server ────────────────────────────────────────────────
+  - id: "PG-001"
+    resource_type: "microsoft.dbforpostgresql/flexibleservers"
+    condition_path: "enriched_public_network_access"
+    expected_value: "Disabled"
+    operator: "equals"
+    severity: "High"
+    waf_pillar: "Security"
+    title: "PostgreSQL Flexible Server: Public network access is not disabled"
+    description: "Azure Database for PostgreSQL Flexible Server public network access should be disabled. Use Private Endpoints or VNet integration for all connectivity."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-networking"
+
+  # ── MySQL Flexible Server ─────────────────────────────────────────────────────
+  - id: "MYSQL-001"
+    resource_type: "microsoft.dbformysql/flexibleservers"
+    condition_path: "enriched_public_network_access"
+    expected_value: "Disabled"
+    operator: "equals"
+    severity: "High"
+    waf_pillar: "Security"
+    title: "MySQL Flexible Server: Public network access is not disabled"
+    description: "Azure Database for MySQL Flexible Server public network access should be disabled. Use Private Endpoints or VNet integration for all connectivity."
+    documentation_url: "https://learn.microsoft.com/en-us/azure/mysql/flexible-server/concepts-networking"

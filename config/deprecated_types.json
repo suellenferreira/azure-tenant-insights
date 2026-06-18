@@ -1,0 +1,74 @@
+{
+  "last_updated": "2026-06-01",
+  "source": "https://azure.microsoft.com/en-us/updates/",
+  "note": "All entries based on official Microsoft Azure retirement announcements only.",
+  "deprecated_types": [
+    {
+      "type": "microsoft.classiccompute/virtualmachines",
+      "display_name": "Classic Virtual Machines",
+      "retirement_date": "2023-09-01",
+      "severity": "Critical",
+      "notes": "Azure Classic VMs were retired on September 1, 2023. Migrate to Azure Resource Manager VMs immediately.",
+      "announcement_url": "https://azure.microsoft.com/en-us/updates/cloud-services-classic-retirement-announcement-feb2023/",
+      "migration_path": "https://learn.microsoft.com/en-us/azure/virtual-machines/migration-classic-resource-manager-overview"
+    },
+    {
+      "type": "microsoft.classicnetwork/virtualnetworks",
+      "display_name": "Classic Virtual Networks",
+      "retirement_date": "2023-09-01",
+      "severity": "Critical",
+      "notes": "Classic VNets were retired alongside Classic VMs. Migrate to Azure Resource Manager.",
+      "announcement_url": "https://azure.microsoft.com/en-us/updates/cloud-services-classic-retirement-announcement-feb2023/",
+      "migration_path": "https://learn.microsoft.com/en-us/azure/virtual-network/migrate-classic-vnet-powershell"
+    },
+    {
+      "type": "microsoft.classicstorage/storageaccounts",
+      "display_name": "Classic Storage Accounts",
+      "retirement_date": "2024-08-30",
+      "severity": "Critical",
+      "notes": "Classic storage accounts are being retired. Migrate to Azure Resource Manager storage accounts.",
+      "announcement_url": "https://azure.microsoft.com/en-us/updates/classic-azure-storage-accounts-will-be-retired-on-30-august-2024/",
+      "migration_path": "https://learn.microsoft.com/en-us/azure/storage/common/classic-account-migration-overview"
+    },
+    {
+      "type": "microsoft.network/virtualnetworkgateways",
+      "display_name": "VPN Gateway (Basic SKU)",
+      "sku_name": "Basic",
+      "retirement_date": "2025-09-30",
+      "severity": "High",
+      "notes": "Basic VPN Gateway SKU is being retired. Migrate to VpnGw1 or higher.",
+      "announcement_url": "https://azure.microsoft.com/en-us/updates/basic-sku-for-vpn-gateway-will-be-retired-on-30-september-2025/",
+      "migration_path": "https://learn.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-about-vpn-gateway-settings"
+    },
+    {
+      "type": "microsoft.sql/servers/databases",
+      "display_name": "Azure SQL Database (Basic tier)",
+      "sku_name": "Basic",
+      "retirement_date": "2024-09-30",
+      "severity": "High",
+      "notes": "Basic service tier for Azure SQL Database is being retired. Migrate to General Purpose or Hyperscale.",
+      "announcement_url": "https://azure.microsoft.com/en-us/updates/azure-sql-database-basic-standard-and-premium-service-tier-retirement/",
+      "migration_path": "https://learn.microsoft.com/en-us/azure/azure-sql/database/service-tiers-general-purpose-business-critical"
+    },
+    {
+      "type": "microsoft.network/publicipaddresses",
+      "display_name": "Public IP Address (Basic SKU)",
+      "sku_name": "Basic",
+      "retirement_date": "2025-09-30",
+      "severity": "High",
+      "notes": "Basic SKU Public IP addresses were retired on September 30, 2025. Migrate to Standard SKU immediately to avoid service disruption.",
+      "announcement_url": "https://azure.microsoft.com/en-us/updates/upgrade-to-standard-sku-public-ip-addresses-in-azure-by-30-september-2025/",
+      "migration_path": "https://learn.microsoft.com/en-us/azure/virtual-network/ip-services/public-ip-upgrade-portal"
+    },
+    {
+      "type": "microsoft.network/loadbalancers",
+      "display_name": "Load Balancer (Basic SKU)",
+      "sku_name": "Basic",
+      "retirement_date": "2025-09-30",
+      "severity": "High",
+      "notes": "Basic SKU Load Balancers were retired on September 30, 2025. Migrate to Standard SKU.",
+      "announcement_url": "https://azure.microsoft.com/en-us/updates/azure-basic-load-balancer-will-be-retired-on-30-september-2025-upgrade-to-standard-load-balancer/",
+      "migration_path": "https://learn.microsoft.com/en-us/azure/load-balancer/load-balancer-basic-upgrade-guidance"
+    }
+  ]
+}

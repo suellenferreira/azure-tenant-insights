@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "azure-tenant-insights"
+version = "1.0.0"
+description = "Dynamic Azure tenant scanner generating Excel inventory and dual HTML reports aligned with the Well-Architected Framework"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+keywords = ["azure", "inventory", "resource-graph", "well-architected", "security"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Developers",
+    "Topic :: System :: Systems Administration",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "azure-identity>=1.15.0",
+    "azure-mgmt-resourcegraph>=8.0.0",
+    "azure-mgmt-subscription>=3.1.1",
+    "requests>=2.31.0",
+    "openpyxl>=3.1.2",
+    "pyyaml>=6.0.1",
+]
+
+[project.scripts]
+invoke-ati = "invoke_ati:main"
+
+[project.urls]
+Homepage = "https://github.com/suellenferreira/azure-tenant-insights"
+Documentation = "https://github.com/suellenferreira/azure-tenant-insights/blob/main/README.md"
+Issues = "https://github.com/suellenferreira/azure-tenant-insights/issues"
+
+[tool.setuptools.packages.find]
+include = ["collectors*", "processors*", "writers*"]
+
+[tool.setuptools.package-data]
+"*" = ["config/*.yaml", "config/*.json"]

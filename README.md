@@ -271,9 +271,9 @@ Three files are generated per run:
 | Sheet | Contents |
 |---|---|
 | `Overview` | KPI summary, top resource types, Advisor by WAF pillar |
-| `Subscriptions` | One row per subscription with resource count |
-| `AllResources` | Flat table of ALL resources across all types |
-| `[ResourceType]` | One sheet per resource type (e.g., `VirtualMachines`) |
+| `Subscriptions` | Resource aggregation by subscription, resource group, location, and resource type |
+| `AllResources` | Flat table across all types with common Azure Resource Graph / ARM columns and raw properties |
+| `[ResourceType]` | One sheet per resource type using configured display names and declarative property enrichment |
 | `AdvisorFindings` | All Advisor recommendations with WAF pillar |
 | `PolicyCompliance` | Non-compliant resources |
 | `ResourceHealth` | Degraded/unavailable resources |
@@ -370,6 +370,8 @@ azure-tenant-insights/
 ### `config/resource_enrichment.yaml`
 
 Defines which nested `properties.*` fields to promote to named columns per resource type. Resources without a rule entry are still collected — their raw `properties` JSON is stored in the `AllResources` sheet.
+
+Promoted fields must be based on official Microsoft references, primarily the [Azure Resource Graph table and resource type reference](https://learn.microsoft.com/en-us/azure/governance/resource-graph/reference/supported-tables-resources) and the [Azure Resource Manager template resource definitions](https://learn.microsoft.com/en-us/azure/templates/). Treat suggested columns as a starting point; verify provider properties against Microsoft Learn before adding them.
 
 To add enrichment for a new resource type:
 

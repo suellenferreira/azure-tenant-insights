@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Enhanced Excel Inventory (Phase A/B)**
+- `AllResources` now includes common Azure Resource Graph / ARM inventory columns such as display type, subscription name, tenant ID, SKU details, provisioning state, created time, identity type, zones, resource ID, and raw properties.
+- `Subscriptions` now summarizes resource inventory by subscription, resource group, location, and resource type instead of only listing one row per subscription.
+- Per-resource-type sheets now use configured display names, prioritize core Azure resource types, and include the union of promoted `enriched_*` columns across all rows, ordered by `config/resource_enrichment.yaml`.
+- Added/expanded declarative profiles for core resource types including VMs, disks, NICs, public IPs, NSGs, VNets, storage accounts, App Services, App Service Plans, Key Vaults, SQL servers/databases, and Private Endpoints.
+- Column selection is grounded in official Microsoft Learn references: [Azure Resource Graph table/resource type reference](https://learn.microsoft.com/en-us/azure/governance/resource-graph/reference/supported-tables-resources) and [ARM template resource definitions](https://learn.microsoft.com/en-us/azure/templates/).
+
 **Defender for Cloud — Plan Posture (B1)**
 - `collectors/defender_posture.py` — collects the real Defender plan enablement per subscription from the `Microsoft.Security/pricings` data via Azure Resource Graph (`securityresources` table). Requires only `Reader` RBAC.
 - VMs / VMSS / Arc Machines are analysed **individually** (per-resource coverage); other workloads are reported at the subscription/plan level (official limitation of the pricings API).

@@ -5,9 +5,9 @@ Generates a formatted, multi-sheet Excel workbook from collected scan data.
 
 Sheets produced:
   Overview         - KPI summary + top resource types + Advisor by pillar
-  Subscriptions    - One row per subscription with resource count
-  AllResources     - Flat table of ALL resources across all types
-  [ResourceType]   - One sheet per resource type (up to MAX_TYPE_SHEETS)
+    Subscriptions    - Resource inventory aggregation by subscription/RG/location/type
+    AllResources     - Flat table of ALL resources with common ARG/ARM columns
+    [ResourceType]   - One sheet per resource type with declarative enrichment
   AdvisorFindings  - All Advisor recommendations with WAF pillar
   PolicyCompliance - Non-compliant resources
   ResourceHealth   - Degraded/unavailable resources
@@ -38,6 +38,22 @@ COLOR_SECTION_BG = "D6E4F0"
 COLOR_ALT_ROW = "F2F7FB"
 
 MAX_TYPE_SHEETS = 40  # Practical limit to avoid unwieldy workbooks
+
+CORE_RESOURCE_TYPES = [
+    "microsoft.compute/virtualmachines",
+    "microsoft.compute/disks",
+    "microsoft.network/networkinterfaces",
+    "microsoft.network/publicipaddresses",
+    "microsoft.network/networksecuritygroups",
+    "microsoft.network/virtualnetworks",
+    "microsoft.storage/storageaccounts",
+    "microsoft.web/sites",
+    "microsoft.web/serverfarms",
+    "microsoft.keyvault/vaults",
+    "microsoft.sql/servers",
+    "microsoft.sql/servers/databases",
+    "microsoft.network/privateendpoints",
+]
 
 
 def write_excel(scan_data: dict, output_path: str) -> None:
@@ -118,6 +134,87 @@ def _severity_fill(severity: str):
     }
     color = colors.get(severity)
     return PatternFill("solid", fgColor=color) if color else None
+
+
+def _subscription_name_map(scan_data: dict) -> Dict[str, str]:
+    return {
+        sub.get("subscriptionId", ""): sub.get("displayName", "")
+        for sub in scan_data.get("subscriptions", [])
+    }
+
+
+def _resource_display_name(resource_type: str, inventory_config: dict) -> str:
+    from processors.normalizer import clean_resource_type
+
+    type_config = inventory_config.get("resource_types", {}).get(resource_type, {})
+    return type_config.get("display_name") or clean_resource_type(resource_type)
+
+
+def _sheet_name_for_type(resource_type: str, inventory_config: dict) -> str:
+    from processors.normalizer import excel_safe_sheet_name
+
+    return excel_safe_sheet_name(_resource_display_name(resource_type, inventory_config))
+
+
+def _inventory_type_items(resources_by_type: dict) -> List[tuple]:
+    """Core resource types first, then remaining types by resource count."""
+    selected = []
+    seen = set()
+
+    for resource_type in CORE_RESOURCE_TYPES:
+        resources = resources_by_type.get(resource_type)
+        if resources:
+            selected.append((resource_type, resources))
+            seen.add(resource_type)
+
+    remaining = sorted(
+        ((rtype, rows) for rtype, rows in resources_by_type.items() if rtype not in seen),
+        key=lambda item: -len(item[1]),
+    )
+    return (selected + remaining)[:MAX_TYPE_SHEETS]
+
+
+def _enriched_columns(resource_type: str, resources: List[dict], inventory_config: dict) -> List[str]:
+    cols = set()
+    for resource in resources:
+        cols.update(k for k in resource.keys() if k.startswith("enriched_"))
+
+    type_config = inventory_config.get("resource_types", {}).get(resource_type, {})
+    configured = [
+        f"enriched_{field.get('column')}"
+        for field in type_config.get("promoted_fields", [])
+        if field.get("column")
+    ]
+    ordered = [col for col in configured if col in cols]
+    extras = sorted(cols.difference(ordered))
+    return ordered + extras
+
+
+def _sku_value(resource: dict, key: str) -> str:
+    from processors.normalizer import safe_str
+
+    sku = resource.get("sku") or {}
+    if isinstance(sku, dict):
+        return safe_str(sku.get(key, ""))
+    return safe_str(sku) if key == "name" else ""
+
+
+def _common_resource_value(resource: dict, key: str) -> Any:
+    properties = resource.get("properties") or {}
+    identity = resource.get("identity") or {}
+    if key == "provisioningState" and isinstance(properties, dict):
+        return properties.get("provisioningState", "")
+    if key == "createdTime" and isinstance(properties, dict):
+        return (
+            properties.get("timeCreated")
+            or properties.get("createdTime")
+            or properties.get("createdAt")
+            or properties.get("dateCreated")
+            or ""
+        )
+    if key == "identityType" and isinstance(identity, dict):
+        return identity.get("type", "")
+    return ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -391,47 +488,89 @@ def _write_overview_sheet(wb, scan_data: dict):
 
 def _write_subscriptions_sheet(wb, scan_data: dict):
     ws = wb.create_sheet("Subscriptions")
-    headers = ["Subscription ID", "Display Name", "State", "Tenant ID", "Resource Count"]
+    headers = [
+        "Subscription",
+        "Subscription ID",
+        "State",
+        "Tenant ID",
+        "Resource Group",
+        "Location",
+        "Resource Type",
+        "Resources Count",
+    ]
     for col, h in enumerate(headers, 1):
         ws.cell(row=1, column=col).value = h
     _header_style(ws, 1, len(headers))
     _auto_filter(ws, 1, len(headers))
     _freeze(ws, 2)
 
-    summary = scan_data.get("summary_metrics", {})
-    sub_counts = summary.get("resources_by_subscription", {})
-    for row, sub in enumerate(scan_data.get("subscriptions", []), 2):
-        sid = sub.get("subscriptionId", "")
-        ws.cell(row=row, column=1).value = sid
-        ws.cell(row=row, column=2).value = sub.get("displayName", "")
+    subscriptions = {
+        sub.get("subscriptionId", ""): sub
+        for sub in scan_data.get("subscriptions", [])
+    }
+    grouped: Dict[tuple, int] = {}
+    for rtype, resources in scan_data.get("resources_by_type", {}).items():
+        for resource in resources:
+            sid = resource.get("subscriptionId", "")
+            key = (
+                sid,
+                resource.get("resourceGroup", ""),
+                resource.get("location", ""),
+                rtype,
+            )
+            grouped[key] = grouped.get(key, 0) + 1
+
+    row = 2
+    for (sid, resource_group, location, rtype), count in sorted(grouped.items()):
+        sub = subscriptions.get(sid, {})
+        ws.cell(row=row, column=1).value = sub.get("displayName", "")
+        ws.cell(row=row, column=2).value = sid
         ws.cell(row=row, column=3).value = sub.get("state", "")
         ws.cell(row=row, column=4).value = sub.get("tenantId", "")
-        ws.cell(row=row, column=5).value = sub_counts.get(sid, 0)
+        ws.cell(row=row, column=5).value = resource_group
+        ws.cell(row=row, column=6).value = location
+        ws.cell(row=row, column=7).value = rtype
+        ws.cell(row=row, column=8).value = count
+        row += 1
 
-    _col_widths(ws, [38, 40, 12, 38, 16])
+    if row == 2:
+        for sub in scan_data.get("subscriptions", []):
+            ws.cell(row=row, column=1).value = sub.get("displayName", "")
+            ws.cell(row=row, column=2).value = sub.get("subscriptionId", "")
+            ws.cell(row=row, column=3).value = sub.get("state", "")
+            ws.cell(row=row, column=4).value = sub.get("tenantId", "")
+            ws.cell(row=row, column=8).value = 0
+            row += 1
+
+    _col_widths(ws, [36, 38, 12, 38, 32, 18, 46, 16])
 
 
 def _write_all_resources_sheet(wb, scan_data: dict, include_tags: bool):
-    from processors.normalizer import safe_str, clean_resource_type, excel_safe_sheet_name
+    from collectors.resources import load_enrichment_config
+    from processors.normalizer import safe_str
 
     ws = wb.create_sheet("AllResources")
 
     # Build resource_type → sheet_name mapping (same ordering as _write_resource_type_sheets)
     resources_by_type = scan_data.get("resources_by_type", {})
-    sorted_types = sorted(resources_by_type.items(), key=lambda x: -len(x[1]))[:MAX_TYPE_SHEETS]
+    inventory_config = load_enrichment_config()
+    sorted_types = _inventory_type_items(resources_by_type)
     type_to_sheet = {
-        rtype: excel_safe_sheet_name(clean_resource_type(rtype))
+        rtype: _sheet_name_for_type(rtype, inventory_config)
         for rtype, _ in sorted_types
     }
+    sub_names = _subscription_name_map(scan_data)
 
     headers = [
         "Resource Tab",
-        "Name", "Type", "Location", "Resource Group", "Subscription ID",
-        "Kind", "SKU Name", "SKU Tier",
+        "Name", "Display Type", "Resource Type", "Location", "Resource Group",
+        "Subscription", "Subscription ID", "Tenant ID",
+        "Kind", "SKU Name", "SKU Tier", "SKU Size", "SKU Family",
+        "Provisioning State", "Created Time", "Identity Type", "Zones",
     ]
     if include_tags:
         headers.append("Tags")
-    headers.append("Resource ID")
+    headers.extend(["Resource ID", "Raw Properties"])
 
     for col, h in enumerate(headers, 1):
         ws.cell(row=1, column=col).value = h
@@ -441,24 +580,31 @@ def _write_all_resources_sheet(wb, scan_data: dict, include_tags: bool):
 
     row = 2
     for rtype, resources in resources_by_type.items():
-        tab_name = type_to_sheet.get(rtype, "—")
+        tab_name = type_to_sheet.get(rtype, "-")
         for resource in resources:
-            sku = resource.get("sku") or {}
-            sku_name = sku.get("name", "") if isinstance(sku, dict) else ""
-            sku_tier = sku.get("tier", "") if isinstance(sku, dict) else ""
+            sid = resource.get("subscriptionId", "")
 
             col = 1
             ws.cell(row=row, column=col).value = tab_name
             col += 1
             for val in [
                 resource.get("name", ""),
+                _resource_display_name(rtype, inventory_config),
                 rtype,
                 resource.get("location", ""),
                 resource.get("resourceGroup", ""),
-                resource.get("subscriptionId", ""),
+                sub_names.get(sid, ""),
+                sid,
+                resource.get("tenantId", ""),
                 safe_str(resource.get("kind", "")),
-                safe_str(sku_name),
-                safe_str(sku_tier),
+                _sku_value(resource, "name"),
+                _sku_value(resource, "tier"),
+                _sku_value(resource, "size"),
+                _sku_value(resource, "family"),
+                safe_str(_common_resource_value(resource, "provisioningState")),
+                safe_str(_common_resource_value(resource, "createdTime")),
+                safe_str(_common_resource_value(resource, "identityType")),
+                safe_str(resource.get("zones", "")),
             ]:
                 ws.cell(row=row, column=col).value = val
                 col += 1
@@ -469,19 +615,22 @@ def _write_all_resources_sheet(wb, scan_data: dict, include_tags: bool):
                 col += 1
 
             ws.cell(row=row, column=col).value = resource.get("id", "")
+            col += 1
+            ws.cell(row=row, column=col).value = safe_str(resource.get("properties", ""))
             row += 1
 
-    _col_widths(ws, [22, 35, 42, 20, 30, 38, 20, 25, 20, 60, 60])
+    _col_widths(ws, [22, 35, 28, 46, 20, 30, 36, 38, 38, 18, 24, 18, 16, 18, 22, 22, 18, 20, 60, 60, 80])
 
 
 def _write_resource_type_sheets(wb, scan_data: dict, include_tags: bool):
+    from collectors.resources import load_enrichment_config
     from processors.normalizer import (
-        clean_resource_type,
-        excel_safe_sheet_name,
         safe_str,
     )
 
     resources_by_type = scan_data.get("resources_by_type", {})
+    inventory_config = load_enrichment_config()
+    sub_names = _subscription_name_map(scan_data)
 
     # Build security findings index: resource_id_lower -> [findings]
     findings_index: dict = {}
@@ -490,27 +639,22 @@ def _write_resource_type_sheets(wb, scan_data: dict, include_tags: bool):
         if _rid:
             findings_index.setdefault(_rid, []).append(_f)
 
-    # Sort by count descending; cap at MAX_TYPE_SHEETS
-    sorted_types = sorted(
-        resources_by_type.items(), key=lambda x: -len(x[1])
-    )[:MAX_TYPE_SHEETS]
+    sorted_types = _inventory_type_items(resources_by_type)
 
     for rtype, resources in sorted_types:
         if not resources:
             continue
 
-        sheet_name = excel_safe_sheet_name(clean_resource_type(rtype))
-        first = resources[0] if resources else {}
-        enriched_cols = sorted(
-            k for k in first.keys() if k.startswith("enriched_")
-        )
+        sheet_name = _sheet_name_for_type(rtype, inventory_config)
+        enriched_cols = _enriched_columns(rtype, resources, inventory_config)
 
         base_headers = [
-            "Name", "Resource Group", "Subscription ID",
-            "Location", "Kind", "SKU",
+            "Name", "Resource Group", "Subscription", "Subscription ID",
+            "Location", "Kind", "SKU Name", "SKU Tier",
+            "Provisioning State", "Created Time", "Identity Type", "Zones",
         ]
         enriched_display = [c.replace("enriched_", "").replace("_", " ").title() for c in enriched_cols]
-        extra = ["Tags", "Resource ID"] if include_tags else ["Resource ID"]
+        extra = ["Tags", "Resource ID", "Raw Properties"] if include_tags else ["Resource ID", "Raw Properties"]
         all_headers = base_headers + enriched_display + extra
 
         ws = wb.create_sheet(sheet_name)
@@ -521,25 +665,32 @@ def _write_resource_type_sheets(wb, scan_data: dict, include_tags: bool):
         _freeze(ws, 2)
 
         for row, resource in enumerate(resources, 2):
-            sku = resource.get("sku") or {}
-            sku_str = safe_str(sku.get("name", "") if isinstance(sku, dict) else sku)
+            sid = resource.get("subscriptionId", "")
 
             ws.cell(row=row, column=1).value = resource.get("name", "")
             ws.cell(row=row, column=2).value = resource.get("resourceGroup", "")
-            ws.cell(row=row, column=3).value = resource.get("subscriptionId", "")
-            ws.cell(row=row, column=4).value = resource.get("location", "")
-            ws.cell(row=row, column=5).value = safe_str(resource.get("kind", ""))
-            ws.cell(row=row, column=6).value = sku_str
+            ws.cell(row=row, column=3).value = sub_names.get(sid, "")
+            ws.cell(row=row, column=4).value = sid
+            ws.cell(row=row, column=5).value = resource.get("location", "")
+            ws.cell(row=row, column=6).value = safe_str(resource.get("kind", ""))
+            ws.cell(row=row, column=7).value = _sku_value(resource, "name")
+            ws.cell(row=row, column=8).value = _sku_value(resource, "tier")
+            ws.cell(row=row, column=9).value = safe_str(_common_resource_value(resource, "provisioningState"))
+            ws.cell(row=row, column=10).value = safe_str(_common_resource_value(resource, "createdTime"))
+            ws.cell(row=row, column=11).value = safe_str(_common_resource_value(resource, "identityType"))
+            ws.cell(row=row, column=12).value = safe_str(resource.get("zones", ""))
 
-            for e_idx, e_col in enumerate(enriched_cols, 7):
+            for e_idx, e_col in enumerate(enriched_cols, 13):
                 ws.cell(row=row, column=e_idx).value = safe_str(resource.get(e_col))
 
-            next_col = 7 + len(enriched_cols)
+            next_col = 13 + len(enriched_cols)
             if include_tags:
                 tags = resource.get("tags") or {}
                 ws.cell(row=row, column=next_col).value = json.dumps(tags) if tags else ""
                 next_col += 1
             ws.cell(row=row, column=next_col).value = resource.get("id", "")
+            next_col += 1
+            ws.cell(row=row, column=next_col).value = safe_str(resource.get("properties", ""))
 
             # Highlight rows that have security findings
             rid_lower = resource.get("id", "").lower()
@@ -560,6 +711,8 @@ def _write_resource_type_sheets(wb, scan_data: dict, include_tags: bool):
                 cmt.width = 320
                 cmt.height = max(60, 22 * min(len(row_findings), 5))
                 ws.cell(row=row, column=1).comment = cmt
+
+        _col_widths(ws, [34, 28, 34, 38, 18, 18, 22, 16, 20, 22, 18, 16] + [24] * len(enriched_cols) + [40, 60, 80])
 
 
 def _write_advisor_sheet(wb, scan_data: dict):

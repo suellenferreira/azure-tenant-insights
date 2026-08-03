@@ -5,9 +5,9 @@ Generates a formatted, multi-sheet Excel workbook from collected scan data.
 
 Sheets produced:
   Overview         - KPI summary + top resource types + Advisor by pillar
-  Subscriptions    - One row per subscription with resource count
-  AllResources     - Flat table of ALL resources across all types
-  [ResourceType]   - One sheet per resource type (up to MAX_TYPE_SHEETS)
+    Subscriptions    - Resource inventory aggregation by subscription/RG/location/type
+    AllResources     - Flat table of ALL resources with common ARG/ARM columns
+    [ResourceType]   - One sheet per resource type with declarative enrichment
   AdvisorFindings  - All Advisor recommendations with WAF pillar
   PolicyCompliance - Non-compliant resources
   ResourceHealth   - Degraded/unavailable resources
@@ -22,6 +22,7 @@ Sheets produced:
 
 import json
 import logging
+import os
 from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,53 @@ COLOR_OK = "70AD47"
 COLOR_SECTION_BG = "D6E4F0"
 COLOR_ALT_ROW = "F2F7FB"
 
-MAX_TYPE_SHEETS = 40  # Practical limit to avoid unwieldy workbooks
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+# ── Worksheet-count governance ───────────────────────────────────────────────
+# Excel supports at most 255 worksheets — this is a hard cap. Resource types beyond
+# the available budget are still represented in the AllResources tab (no own sheet).
+EXCEL_MAX_SHEETS = 255
+
+# Scope-aware warning thresholds: emit a warning once the number of resource-type
+# sheets reaches these values (navigation becomes cumbersome). Env-overridable.
+SCOPE_WARN_THRESHOLDS = {
+    "subscription": _env_int("ATI_SHEET_WARN_SUBSCRIPTION", 40),
+    "management-group": _env_int("ATI_SHEET_WARN_MANAGEMENT_GROUP", 60),
+    "tenant": _env_int("ATI_SHEET_WARN_TENANT", 75),
+}
+# Hard warning once the sheet count approaches the Excel ceiling.
+SHEET_WARN_HARD = _env_int("ATI_SHEET_WARN_HARD", 200)
+
+# Fixed sheet names — reserved so type sheets never collide with them.
+RESERVED_SHEET_NAMES = {
+    "Overview", "Index", "Subscriptions", "AllResources",
+    "AdvisorFindings", "PolicyCompliance", "ResourceHealth",
+    "DeprecatedResources", "MisconfigFindings", "SecurityAssessments",
+    "DefenderCostEstimate", "DefenderPosture", "DefenderServersCoverage",
+    "DefenderCoverageGap", "Costs",
+}
+
+CORE_RESOURCE_TYPES = [
+    "microsoft.compute/virtualmachines",
+    "microsoft.compute/disks",
+    "microsoft.network/networkinterfaces",
+    "microsoft.network/publicipaddresses",
+    "microsoft.network/networksecuritygroups",
+    "microsoft.network/virtualnetworks",
+    "microsoft.storage/storageaccounts",
+    "microsoft.web/sites",
+    "microsoft.web/serverfarms",
+    "microsoft.keyvault/vaults",
+    "microsoft.sql/servers",
+    "microsoft.sql/servers/databases",
+    "microsoft.network/privateendpoints",
+]
 
 
 def write_excel(scan_data: dict, output_path: str) -> None:
@@ -51,10 +98,14 @@ def write_excel(scan_data: dict, output_path: str) -> None:
     options = scan_data.get("options", {})
     include_tags = options.get("include_tags", False)
 
+    # Single source-of-truth resource_type → sheet-name map (namespace-aware,
+    # collision-free), shared across the type sheets and the AllResources tab.
+    sheet_map = _prepare_type_sheet_map(scan_data)
+
     _write_overview_sheet(wb, scan_data)
     _write_subscriptions_sheet(wb, scan_data)
-    _write_all_resources_sheet(wb, scan_data, include_tags)
-    _write_resource_type_sheets(wb, scan_data, include_tags)
+    _write_all_resources_sheet(wb, scan_data, include_tags, sheet_map)
+    _write_resource_type_sheets(wb, scan_data, include_tags, sheet_map)
     _write_advisor_sheet(wb, scan_data)
     _write_policy_sheet(wb, scan_data)
     _write_health_sheet(wb, scan_data)
@@ -72,6 +123,11 @@ def write_excel(scan_data: dict, output_path: str) -> None:
 
     if scan_data.get("costs_data"):
         _write_costs_sheet(wb, scan_data)
+
+    # Navigation: Index sheet (positioned right after Overview) + per-sheet
+    # "back to Index" links.
+    _write_index_sheet(wb)
+    _add_back_links(wb)
 
     wb.save(output_path)
     logger.info(f"Excel workbook saved: {output_path}")
@@ -118,6 +174,244 @@ def _severity_fill(severity: str):
     }
     color = colors.get(severity)
     return PatternFill("solid", fgColor=color) if color else None
+
+
+def _subscription_name_map(scan_data: dict) -> Dict[str, str]:
+    return {
+        sub.get("subscriptionId", ""): sub.get("displayName", "")
+        for sub in scan_data.get("subscriptions", [])
+    }
+
+
+def _resource_display_name(resource_type: str, inventory_config: dict) -> str:
+    from processors.normalizer import clean_resource_type
+
+    type_config = inventory_config.get("resource_types", {}).get(resource_type, {})
+    return type_config.get("display_name") or clean_resource_type(resource_type)
+
+
+def _sheet_name_for_type(resource_type: str, inventory_config: dict) -> str:
+    from processors.normalizer import excel_safe_sheet_name
+
+    return excel_safe_sheet_name(_resource_display_name(resource_type, inventory_config))
+
+
+# ── Namespace / category helpers ─────────────────────────────────────────────
+_PROVIDER_ABBREV = {
+    "microsoft.compute": "Cmp",
+    "microsoft.network": "Net",
+    "microsoft.storage": "Stor",
+    "microsoft.web": "Web",
+    "microsoft.keyvault": "Kv",
+    "microsoft.sql": "Sql",
+    "microsoft.connectedvmwarevsphere": "VMw",
+    "microsoft.hybridcompute": "Arc",
+    "microsoft.azurestackhci": "Hci",
+    "microsoft.scvmm": "Scvmm",
+    "microsoft.azuremigrate": "Mig",
+    "microsoft.migrate": "Mig",
+}
+
+_HYBRID_PROVIDERS = {
+    "microsoft.connectedvmwarevsphere",
+    "microsoft.hybridcompute",
+    "microsoft.azurestackhci",
+    "microsoft.scvmm",
+    "microsoft.hybridcontainerservice",
+}
+_MIGRATE_PROVIDERS = {
+    "microsoft.azuremigrate",
+    "microsoft.migrate",
+    "microsoft.offazure",
+    "microsoft.datareplication",
+}
+
+
+def _provider_of(resource_type: str) -> str:
+    return resource_type.split("/", 1)[0].lower()
+
+
+def _provider_token(resource_type: str) -> str:
+    """Short, human-friendly abbreviation for a resource provider namespace."""
+    provider = _provider_of(resource_type)
+    if provider in _PROVIDER_ABBREV:
+        return _PROVIDER_ABBREV[provider]
+    tail = provider.split(".")[-1] if "." in provider else provider
+    return (tail[:3] or "Res").title()
+
+
+def _resource_category(resource_type: str) -> str:
+    """Classify a resource type as Azure-native, hybrid/Arc, or Migrate."""
+    provider = _provider_of(resource_type)
+    if provider in _HYBRID_PROVIDERS:
+        return "Hybrid / Arc"
+    if provider in _MIGRATE_PROVIDERS:
+        return "Migrate"
+    return "Azure Native"
+
+
+def _scan_scope(scan_data: dict) -> str:
+    """Resolve the scan scope; fall back to inferring it from subscription count."""
+    meta = scan_data.get("metadata", {})
+    scope = meta.get("scan_scope")
+    if scope in SCOPE_WARN_THRESHOLDS:
+        return scope
+    n_subs = meta.get("subscription_count") or len(scan_data.get("subscriptions", []))
+    if n_subs <= 1:
+        return "subscription"
+    if n_subs <= 5:
+        return "management-group"
+    return "tenant"
+
+
+def _build_sheet_name_map(sorted_types, inventory_config, budget, reserved_names) -> Dict[str, str]:
+    """Single source of truth: resource_type → unique, collision-free sheet name.
+
+    A namespace token is prepended ONLY when the bare display name would collide
+    with another provider's type or with a reserved fixed-sheet name, keeping clean
+    names for the common case while eliminating the same-suffix collision bug.
+    """
+    from processors.normalizer import excel_safe_sheet_name
+
+    eligible = sorted_types[:budget]
+
+    base_of: Dict[str, str] = {}
+    base_counts: Dict[str, int] = {}
+    for rtype, _rows in eligible:
+        base = excel_safe_sheet_name(_resource_display_name(rtype, inventory_config))
+        base_of[rtype] = base
+        base_counts[base.lower()] = base_counts.get(base.lower(), 0) + 1
+
+    used = {n.lower() for n in reserved_names}
+    mapping: Dict[str, str] = {}
+    for rtype, _rows in eligible:
+        base = base_of[rtype]
+        if base_counts[base.lower()] > 1 or base.lower() in used:
+            name = excel_safe_sheet_name(f"{_provider_token(rtype)}-{base}")
+        else:
+            name = base
+        final = name
+        n = 2
+        while final.lower() in used:
+            suffix = f"~{n}"
+            final = excel_safe_sheet_name(final[: 31 - len(suffix)] + suffix)
+            n += 1
+        used.add(final.lower())
+        mapping[rtype] = final
+    return mapping
+
+
+def _reserved_sheet_count(scan_data: dict) -> int:
+    """Number of fixed (non-type) sheets that will be created for this scan."""
+    count = 9  # Overview, Index, Subscriptions, AllResources, Advisor, Policy,
+    #            Health, Deprecated, Misconfig
+    if scan_data.get("defender_data"):
+        count += 2  # SecurityAssessments + DefenderCostEstimate
+    if scan_data.get("defender_posture"):
+        count += 3  # DefenderPosture + DefenderServersCoverage + DefenderCoverageGap
+    if scan_data.get("costs_data"):
+        count += 1  # Costs
+    return count
+
+
+def _prepare_type_sheet_map(scan_data: dict) -> Dict[str, str]:
+    """Build the shared type→sheet map and emit scope-aware capacity warnings."""
+    from collectors.resources import load_enrichment_config
+
+    resources_by_type = scan_data.get("resources_by_type", {})
+    inventory_config = load_enrichment_config()
+    sorted_types = _inventory_type_items(resources_by_type)
+
+    reserved = _reserved_sheet_count(scan_data)
+    budget = max(1, EXCEL_MAX_SHEETS - reserved)
+
+    sheet_map = _build_sheet_name_map(
+        sorted_types, inventory_config, budget, RESERVED_SHEET_NAMES
+    )
+
+    n_types = len(sorted_types)
+    n_sheets = len(sheet_map)
+    scope = _scan_scope(scan_data)
+    threshold = SCOPE_WARN_THRESHOLDS.get(scope, 50)
+
+    if n_sheets >= threshold:
+        logger.warning(
+            f"Workbook will contain {n_sheets} resource-type sheets "
+            f"(scan scope='{scope}', warning threshold={threshold}). Navigation may be "
+            f"cumbersome — use the Index sheet to jump between tabs."
+        )
+    if n_sheets >= SHEET_WARN_HARD:
+        logger.warning(
+            f"Resource-type sheet count ({n_sheets}) is approaching the Excel hard "
+            f"limit of {EXCEL_MAX_SHEETS} sheets."
+        )
+    if n_types > budget:
+        logger.warning(
+            f"{n_types - budget} resource type(s) exceed the Excel {EXCEL_MAX_SHEETS}-sheet "
+            f"limit and will appear only in the AllResources tab (no dedicated sheet)."
+        )
+    return sheet_map
+
+
+def _inventory_type_items(resources_by_type: dict) -> List[tuple]:
+    """Core resource types first, then remaining types by resource count."""
+    selected = []
+    seen = set()
+
+    for resource_type in CORE_RESOURCE_TYPES:
+        resources = resources_by_type.get(resource_type)
+        if resources:
+            selected.append((resource_type, resources))
+            seen.add(resource_type)
+
+    remaining = sorted(
+        ((rtype, rows) for rtype, rows in resources_by_type.items() if rtype not in seen),
+        key=lambda item: -len(item[1]),
+    )
+    return selected + remaining
+
+
+def _enriched_columns(resource_type: str, resources: List[dict], inventory_config: dict) -> List[str]:
+    cols = set()
+    for resource in resources:
+        cols.update(k for k in resource.keys() if k.startswith("enriched_"))
+
+    type_config = inventory_config.get("resource_types", {}).get(resource_type, {})
+    configured = [
+        f"enriched_{field.get('column')}"
+        for field in type_config.get("promoted_fields", [])
+        if field.get("column")
+    ]
+    ordered = [col for col in configured if col in cols]
+    extras = sorted(cols.difference(ordered))
+    return ordered + extras
+
+
+def _sku_value(resource: dict, key: str) -> str:
+    from processors.normalizer import safe_str
+
+    sku = resource.get("sku") or {}
+    if isinstance(sku, dict):
+        return safe_str(sku.get(key, ""))
+    return safe_str(sku) if key == "name" else ""
+
+
+def _common_resource_value(resource: dict, key: str) -> Any:
+    properties = resource.get("properties") or {}
+    identity = resource.get("identity") or {}
+    if key == "provisioningState" and isinstance(properties, dict):
+        return properties.get("provisioningState", "")
+    if key == "createdTime" and isinstance(properties, dict):
+        return (
+            properties.get("timeCreated")
+            or properties.get("createdTime")
+            or properties.get("createdAt")
+            or properties.get("dateCreated")
+            or ""
+        )
+    if key == "identityType" and isinstance(identity, dict):
+        return identity.get("type", "")
+    return ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -220,6 +514,43 @@ def _write_overview_sheet(wb, scan_data: dict):
             top=Side(style="thin", color="D3D3D3"),
             bottom=Side(style="thin", color="D3D3D3"),
         )
+
+    # Section 1b: Resource Origin (Azure-native vs hybrid/Arc vs Migrate)
+    origin_counts = {"Azure Native": 0, "Hybrid / Arc": 0, "Migrate": 0}
+    for _rt, _rows in scan_data.get("resources_by_type", {}).items():
+        origin_counts[_resource_category(_rt)] += len(_rows)
+
+    ws.merge_cells("A15:B15")
+    ws["A15"].value = "RESOURCE ORIGIN"
+    ws["A15"].fill = section_header_fill
+    ws["A15"].font = section_header_font
+    ws["A15"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[15].height = 22
+
+    _origin_palette = {
+        "Azure Native": COLOR_SECTION_BG,
+        "Hybrid / Arc": COLOR_MEDIUM,
+        "Migrate": "D9D2E9",
+    }
+    for _i, _label in enumerate(("Azure Native", "Hybrid / Arc", "Migrate")):
+        _r = 16 + _i
+        _lc = ws.cell(row=_r, column=1)
+        _lc.value = _label
+        _lc.font = Font(bold=True, size=10)
+        _lc.fill = PatternFill("solid", fgColor="F5F5F5")
+        _lc.alignment = Alignment(horizontal="left", vertical="center")
+        _vc = ws.cell(row=_r, column=2)
+        _vc.value = origin_counts[_label]
+        _vc.fill = PatternFill("solid", fgColor=_origin_palette[_label])
+        _vc.font = Font(bold=True, size=11)
+        _vc.alignment = Alignment(horizontal="center", vertical="center")
+        _vc.border = Border(
+            left=Side(style="thin", color="D3D3D3"),
+            right=Side(style="thin", color="D3D3D3"),
+            top=Side(style="thin", color="D3D3D3"),
+            bottom=Side(style="thin", color="D3D3D3"),
+        )
+        ws.row_dimensions[_r].height = 20
 
     # Section 2: Top Resource Types (with dark header)
     ws.merge_cells("D4:E4")
@@ -387,51 +718,127 @@ def _write_overview_sheet(wb, scan_data: dict):
 
         ws.add_chart(chart, f"C{chart_data_start}")
 
+    # Section 6: Data Collection Notes (subtle — mirrors the HTML reports)
+    collection_warnings = scan_data.get("collection_warnings", [])
+    notes_start = chart_data_start + max(26, len(top_regions) + 4)
+    ws.merge_cells(f"A{notes_start}:H{notes_start}")
+    _nh = ws[f"A{notes_start}"]
+    _nh.value = "DATA COLLECTION NOTES"
+    _nh.fill = section_header_fill
+    _nh.font = section_header_font
+    _nh.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[notes_start].height = 22
+
+    _note_font = Font(size=9, color="8A8A8A", italic=True)
+    _note_fill = PatternFill("solid", fgColor="F7F7F7")
+    _note_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    if collection_warnings:
+        for _i, _w in enumerate(collection_warnings):
+            _r = notes_start + 1 + _i
+            ws.merge_cells(f"A{_r}:H{_r}")
+            _c = ws[f"A{_r}"]
+            _collector = (_w.get("collector", "") or "").strip()
+            _level = (_w.get("level", "") or "").strip()
+            _msg = (_w.get("message", "") or "").strip()
+            _prefix = f"[{_level}] " if _level else ""
+            _c.value = f"{_prefix}{_collector}: {_msg}" if _collector else f"{_prefix}{_msg}"
+            _c.font = _note_font
+            _c.fill = _note_fill
+            _c.alignment = _note_align
+            ws.row_dimensions[_r].height = 16
+    else:
+        _r = notes_start + 1
+        ws.merge_cells(f"A{_r}:H{_r}")
+        _c = ws[f"A{_r}"]
+        _c.value = (
+            "No data collection warnings recorded for this scan — "
+            "all requested sources returned successfully."
+        )
+        _c.font = _note_font
+        _c.fill = _note_fill
+        _c.alignment = _note_align
+        ws.row_dimensions[_r].height = 16
 
 
 def _write_subscriptions_sheet(wb, scan_data: dict):
     ws = wb.create_sheet("Subscriptions")
-    headers = ["Subscription ID", "Display Name", "State", "Tenant ID", "Resource Count"]
+    headers = [
+        "Subscription",
+        "Subscription ID",
+        "State",
+        "Tenant ID",
+        "Resource Group",
+        "Location",
+        "Resource Type",
+        "Resources Count",
+    ]
     for col, h in enumerate(headers, 1):
         ws.cell(row=1, column=col).value = h
     _header_style(ws, 1, len(headers))
     _auto_filter(ws, 1, len(headers))
     _freeze(ws, 2)
 
-    summary = scan_data.get("summary_metrics", {})
-    sub_counts = summary.get("resources_by_subscription", {})
-    for row, sub in enumerate(scan_data.get("subscriptions", []), 2):
-        sid = sub.get("subscriptionId", "")
-        ws.cell(row=row, column=1).value = sid
-        ws.cell(row=row, column=2).value = sub.get("displayName", "")
+    subscriptions = {
+        sub.get("subscriptionId", ""): sub
+        for sub in scan_data.get("subscriptions", [])
+    }
+    grouped: Dict[tuple, int] = {}
+    for rtype, resources in scan_data.get("resources_by_type", {}).items():
+        for resource in resources:
+            sid = resource.get("subscriptionId", "")
+            key = (
+                sid,
+                resource.get("resourceGroup", ""),
+                resource.get("location", ""),
+                rtype,
+            )
+            grouped[key] = grouped.get(key, 0) + 1
+
+    row = 2
+    for (sid, resource_group, location, rtype), count in sorted(grouped.items()):
+        sub = subscriptions.get(sid, {})
+        ws.cell(row=row, column=1).value = sub.get("displayName", "")
+        ws.cell(row=row, column=2).value = sid
         ws.cell(row=row, column=3).value = sub.get("state", "")
         ws.cell(row=row, column=4).value = sub.get("tenantId", "")
-        ws.cell(row=row, column=5).value = sub_counts.get(sid, 0)
+        ws.cell(row=row, column=5).value = resource_group
+        ws.cell(row=row, column=6).value = location
+        ws.cell(row=row, column=7).value = rtype
+        ws.cell(row=row, column=8).value = count
+        row += 1
 
-    _col_widths(ws, [38, 40, 12, 38, 16])
+    if row == 2:
+        for sub in scan_data.get("subscriptions", []):
+            ws.cell(row=row, column=1).value = sub.get("displayName", "")
+            ws.cell(row=row, column=2).value = sub.get("subscriptionId", "")
+            ws.cell(row=row, column=3).value = sub.get("state", "")
+            ws.cell(row=row, column=4).value = sub.get("tenantId", "")
+            ws.cell(row=row, column=8).value = 0
+            row += 1
+
+    _col_widths(ws, [36, 38, 12, 38, 32, 18, 46, 16])
 
 
-def _write_all_resources_sheet(wb, scan_data: dict, include_tags: bool):
-    from processors.normalizer import safe_str, clean_resource_type, excel_safe_sheet_name
+def _write_all_resources_sheet(wb, scan_data: dict, include_tags: bool, sheet_map: Dict[str, str]):
+    from collectors.resources import load_enrichment_config
+    from processors.normalizer import safe_str
 
     ws = wb.create_sheet("AllResources")
 
-    # Build resource_type → sheet_name mapping (same ordering as _write_resource_type_sheets)
     resources_by_type = scan_data.get("resources_by_type", {})
-    sorted_types = sorted(resources_by_type.items(), key=lambda x: -len(x[1]))[:MAX_TYPE_SHEETS]
-    type_to_sheet = {
-        rtype: excel_safe_sheet_name(clean_resource_type(rtype))
-        for rtype, _ in sorted_types
-    }
+    inventory_config = load_enrichment_config()
+    sub_names = _subscription_name_map(scan_data)
 
     headers = [
         "Resource Tab",
-        "Name", "Type", "Location", "Resource Group", "Subscription ID",
-        "Kind", "SKU Name", "SKU Tier",
+        "Name", "Display Type", "Resource Type", "Category", "Location", "Resource Group",
+        "Subscription", "Subscription ID", "Tenant ID",
+        "Kind", "SKU Name", "SKU Tier", "SKU Size", "SKU Family",
+        "Provisioning State", "Created Time", "Identity Type", "Zones",
     ]
     if include_tags:
         headers.append("Tags")
-    headers.append("Resource ID")
+    headers.extend(["Resource ID", "Raw Properties"])
 
     for col, h in enumerate(headers, 1):
         ws.cell(row=1, column=col).value = h
@@ -441,24 +848,32 @@ def _write_all_resources_sheet(wb, scan_data: dict, include_tags: bool):
 
     row = 2
     for rtype, resources in resources_by_type.items():
-        tab_name = type_to_sheet.get(rtype, "—")
+        tab_name = sheet_map.get(rtype, "(AllResources)")
         for resource in resources:
-            sku = resource.get("sku") or {}
-            sku_name = sku.get("name", "") if isinstance(sku, dict) else ""
-            sku_tier = sku.get("tier", "") if isinstance(sku, dict) else ""
+            sid = resource.get("subscriptionId", "")
 
             col = 1
             ws.cell(row=row, column=col).value = tab_name
             col += 1
             for val in [
                 resource.get("name", ""),
+                _resource_display_name(rtype, inventory_config),
                 rtype,
+                _resource_category(rtype),
                 resource.get("location", ""),
                 resource.get("resourceGroup", ""),
-                resource.get("subscriptionId", ""),
+                sub_names.get(sid, ""),
+                sid,
+                resource.get("tenantId", ""),
                 safe_str(resource.get("kind", "")),
-                safe_str(sku_name),
-                safe_str(sku_tier),
+                _sku_value(resource, "name"),
+                _sku_value(resource, "tier"),
+                _sku_value(resource, "size"),
+                _sku_value(resource, "family"),
+                safe_str(_common_resource_value(resource, "provisioningState")),
+                safe_str(_common_resource_value(resource, "createdTime")),
+                safe_str(_common_resource_value(resource, "identityType")),
+                safe_str(resource.get("zones", "")),
             ]:
                 ws.cell(row=row, column=col).value = val
                 col += 1
@@ -469,19 +884,22 @@ def _write_all_resources_sheet(wb, scan_data: dict, include_tags: bool):
                 col += 1
 
             ws.cell(row=row, column=col).value = resource.get("id", "")
+            col += 1
+            ws.cell(row=row, column=col).value = safe_str(resource.get("properties", ""))
             row += 1
 
-    _col_widths(ws, [22, 35, 42, 20, 30, 38, 20, 25, 20, 60, 60])
+    _col_widths(ws, [22, 35, 28, 46, 18, 20, 30, 36, 38, 38, 18, 24, 18, 16, 18, 22, 22, 18, 20, 60, 60, 80])
 
 
-def _write_resource_type_sheets(wb, scan_data: dict, include_tags: bool):
+def _write_resource_type_sheets(wb, scan_data: dict, include_tags: bool, sheet_map: Dict[str, str]):
+    from collectors.resources import load_enrichment_config
     from processors.normalizer import (
-        clean_resource_type,
-        excel_safe_sheet_name,
         safe_str,
     )
 
     resources_by_type = scan_data.get("resources_by_type", {})
+    inventory_config = load_enrichment_config()
+    sub_names = _subscription_name_map(scan_data)
 
     # Build security findings index: resource_id_lower -> [findings]
     findings_index: dict = {}
@@ -490,27 +908,20 @@ def _write_resource_type_sheets(wb, scan_data: dict, include_tags: bool):
         if _rid:
             findings_index.setdefault(_rid, []).append(_f)
 
-    # Sort by count descending; cap at MAX_TYPE_SHEETS
-    sorted_types = sorted(
-        resources_by_type.items(), key=lambda x: -len(x[1])
-    )[:MAX_TYPE_SHEETS]
-
-    for rtype, resources in sorted_types:
+    for rtype, sheet_name in sheet_map.items():
+        resources = resources_by_type.get(rtype)
         if not resources:
             continue
 
-        sheet_name = excel_safe_sheet_name(clean_resource_type(rtype))
-        first = resources[0] if resources else {}
-        enriched_cols = sorted(
-            k for k in first.keys() if k.startswith("enriched_")
-        )
+        enriched_cols = _enriched_columns(rtype, resources, inventory_config)
 
         base_headers = [
-            "Name", "Resource Group", "Subscription ID",
-            "Location", "Kind", "SKU",
+            "Name", "Resource Group", "Subscription", "Subscription ID",
+            "Location", "Kind", "SKU Name", "SKU Tier",
+            "Provisioning State", "Created Time", "Identity Type", "Zones",
         ]
         enriched_display = [c.replace("enriched_", "").replace("_", " ").title() for c in enriched_cols]
-        extra = ["Tags", "Resource ID"] if include_tags else ["Resource ID"]
+        extra = ["Tags", "Resource ID", "Raw Properties"] if include_tags else ["Resource ID", "Raw Properties"]
         all_headers = base_headers + enriched_display + extra
 
         ws = wb.create_sheet(sheet_name)
@@ -521,25 +932,32 @@ def _write_resource_type_sheets(wb, scan_data: dict, include_tags: bool):
         _freeze(ws, 2)
 
         for row, resource in enumerate(resources, 2):
-            sku = resource.get("sku") or {}
-            sku_str = safe_str(sku.get("name", "") if isinstance(sku, dict) else sku)
+            sid = resource.get("subscriptionId", "")
 
             ws.cell(row=row, column=1).value = resource.get("name", "")
             ws.cell(row=row, column=2).value = resource.get("resourceGroup", "")
-            ws.cell(row=row, column=3).value = resource.get("subscriptionId", "")
-            ws.cell(row=row, column=4).value = resource.get("location", "")
-            ws.cell(row=row, column=5).value = safe_str(resource.get("kind", ""))
-            ws.cell(row=row, column=6).value = sku_str
+            ws.cell(row=row, column=3).value = sub_names.get(sid, "")
+            ws.cell(row=row, column=4).value = sid
+            ws.cell(row=row, column=5).value = resource.get("location", "")
+            ws.cell(row=row, column=6).value = safe_str(resource.get("kind", ""))
+            ws.cell(row=row, column=7).value = _sku_value(resource, "name")
+            ws.cell(row=row, column=8).value = _sku_value(resource, "tier")
+            ws.cell(row=row, column=9).value = safe_str(_common_resource_value(resource, "provisioningState"))
+            ws.cell(row=row, column=10).value = safe_str(_common_resource_value(resource, "createdTime"))
+            ws.cell(row=row, column=11).value = safe_str(_common_resource_value(resource, "identityType"))
+            ws.cell(row=row, column=12).value = safe_str(resource.get("zones", ""))
 
-            for e_idx, e_col in enumerate(enriched_cols, 7):
+            for e_idx, e_col in enumerate(enriched_cols, 13):
                 ws.cell(row=row, column=e_idx).value = safe_str(resource.get(e_col))
 
-            next_col = 7 + len(enriched_cols)
+            next_col = 13 + len(enriched_cols)
             if include_tags:
                 tags = resource.get("tags") or {}
                 ws.cell(row=row, column=next_col).value = json.dumps(tags) if tags else ""
                 next_col += 1
             ws.cell(row=row, column=next_col).value = resource.get("id", "")
+            next_col += 1
+            ws.cell(row=row, column=next_col).value = safe_str(resource.get("properties", ""))
 
             # Highlight rows that have security findings
             rid_lower = resource.get("id", "").lower()
@@ -560,6 +978,76 @@ def _write_resource_type_sheets(wb, scan_data: dict, include_tags: bool):
                 cmt.width = 320
                 cmt.height = max(60, 22 * min(len(row_findings), 5))
                 ws.cell(row=row, column=1).comment = cmt
+
+        _col_widths(ws, [34, 28, 34, 38, 18, 18, 22, 16, 20, 22, 18, 16] + [24] * len(enriched_cols) + [40, 60, 80])
+
+
+def _write_index_sheet(wb):
+    """Create a navigation Index sheet listing every tab with a hyperlink,
+    positioned right after Overview."""
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.worksheet.hyperlink import Hyperlink
+
+    ws = wb.create_sheet("Index")
+    ws.sheet_view.showGridLines = False
+
+    ws.merge_cells("A1:C1")
+    title = ws["A1"]
+    title.value = "Index — Workbook Navigation"
+    title.font = Font(bold=True, size=16, color="FFFFFF")
+    title.fill = PatternFill("solid", fgColor=COLOR_HEADER_BG)
+    title.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[1].height = 32
+
+    ws["A2"].value = "#"
+    ws["B2"].value = "Sheet"
+    ws["C2"].value = "Go"
+    _header_style(ws, 2, 3)
+    _freeze(ws, 3)
+
+    link_font = Font(color="0563C1", underline="single")
+    row = 3
+    n = 1
+    for name in wb.sheetnames:
+        if name in ("Overview", "Index"):
+            continue
+        ws.cell(row=row, column=1).value = n
+        name_cell = ws.cell(row=row, column=2)
+        name_cell.value = name
+        name_cell.font = Font(size=10)
+        link_cell = ws.cell(row=row, column=3)
+        link_cell.value = "Open →"
+        link_cell.hyperlink = Hyperlink(
+            ref=link_cell.coordinate, location=f"'{name}'!A1", display=name
+        )
+        link_cell.font = link_font
+        ws.row_dimensions[row].height = 18
+        row += 1
+        n += 1
+
+    _col_widths(ws, [6, 42, 14])
+
+    # Move Index to position 1 (right after Overview at position 0).
+    wb.move_sheet(ws, offset=1 - wb.index(ws))
+
+
+def _add_back_links(wb):
+    """Add a '↩ Index' hyperlink on every sheet (except Overview/Index) so users
+    can jump back to the navigation Index."""
+    from openpyxl.styles import Font
+    from openpyxl.worksheet.hyperlink import Hyperlink
+
+    back_font = Font(bold=True, color="0563C1", underline="single")
+    for ws in wb.worksheets:
+        if ws.title in ("Overview", "Index"):
+            continue
+        col = ws.max_column + 2
+        cell = ws.cell(row=1, column=col)
+        cell.value = "↩ Index"
+        cell.hyperlink = Hyperlink(
+            ref=cell.coordinate, location="'Index'!A1", display="Index"
+        )
+        cell.font = back_font
 
 
 def _write_advisor_sheet(wb, scan_data: dict):

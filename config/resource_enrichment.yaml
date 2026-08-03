@@ -2,6 +2,14 @@
 # Defines which properties to promote to named columns per resource type.
 # Resources WITHOUT enrichment rules are still captured with their raw
 # 'properties' blob in the AllResources sheet — nothing is silently dropped.
+#
+# Field paths are grounded in Microsoft official references:
+# - Azure Resource Graph Resources table/resource type reference:
+#   https://learn.microsoft.com/en-us/azure/governance/resource-graph/reference/supported-tables-resources
+# - ARM template resource definitions under https://learn.microsoft.com/en-us/azure/templates/
+#
+# Keep this file declarative. Prefer official ARM/ARG property paths and leave
+# fast-changing/nested details in Raw Properties unless a field is broadly useful.
 
 resource_types:
 
@@ -10,10 +18,22 @@ resource_types:
     promoted_fields:
       - path: "properties.hardwareProfile.vmSize"
         column: "vm_size"
+      - path: "properties.extended.instanceView.powerState.displayStatus"
+        column: "power_state"
       - path: "properties.storageProfile.osDisk.osType"
         column: "os_type"
+      - path: "properties.storageProfile.imageReference.publisher"
+        column: "image_publisher"
+      - path: "properties.storageProfile.imageReference.offer"
+        column: "image_offer"
+      - path: "properties.storageProfile.imageReference.sku"
+        column: "image_sku"
       - path: "properties.storageProfile.osDisk.diskSizeGB"
         column: "os_disk_size_gb"
+      - path: "properties.storageProfile.osDisk.managedDisk.id"
+        column: "os_disk_id"
+      - path: "properties.networkProfile.networkInterfaces"
+        column: "network_interfaces"
       - path: "properties.osProfile.computerName"
         column: "computer_name"
       - path: "properties.diagnosticsProfile.bootDiagnostics.enabled"
@@ -26,14 +46,28 @@ resource_types:
   "microsoft.storage/storageaccounts":
     display_name: "Storage Accounts"
     promoted_fields:
+      - path: "sku.name"
+        column: "sku"
+      - path: "properties.accessTier"
+        column: "access_tier"
       - path: "properties.allowBlobPublicAccess"
         column: "allow_blob_public_access"
+      - path: "properties.allowSharedKeyAccess"
+        column: "allow_shared_key_access"
       - path: "properties.enableHttpsTrafficOnly"
         column: "https_only"
+      - path: "properties.supportsHttpsTrafficOnly"
+        column: "supports_https_only"
       - path: "properties.minimumTlsVersion"
         column: "min_tls_version"
       - path: "properties.publicNetworkAccess"
         column: "public_network_access"
+      - path: "properties.networkAcls.defaultAction"
+        column: "network_default_action"
+      - path: "properties.isHnsEnabled"
+        column: "hns_enabled"
+      - path: "properties.isSftpEnabled"
+        column: "sftp_enabled"
       - path: "properties.encryption.requireInfrastructureEncryption"
         column: "infrastructure_encryption"
       - path: "kind"
@@ -62,10 +96,20 @@ resource_types:
         column: "disk_size_gb"
       - path: "properties.diskState"
         column: "disk_state"
+      - path: "managedBy"
+        column: "managed_by"
+      - path: "properties.managedBy"
+        column: "associated_resource"
       - path: "properties.encryption.type"
         column: "encryption_type"
       - path: "properties.networkAccessPolicy"
         column: "network_access_policy"
+      - path: "properties.publicNetworkAccess"
+        column: "public_network_access"
+      - path: "properties.diskIOPSReadWrite"
+        column: "disk_iops_read_write"
+      - path: "properties.diskMBpsReadWrite"
+        column: "disk_mbps_read_write"
       - path: "properties.osType"
         column: "os_type"
       - path: "sku.name"
@@ -76,6 +120,12 @@ resource_types:
     promoted_fields:
       - path: "properties.addressSpace.addressPrefixes"
         column: "address_prefixes"
+      - path: "properties.dhcpOptions.dnsServers"
+        column: "dns_servers"
+      - path: "properties.subnets"
+        column: "subnets"
+      - path: "properties.virtualNetworkPeerings"
+        column: "peerings"
       - path: "properties.enableDdosProtection"
         column: "ddos_protection"
       - path: "properties.provisioningState"
@@ -84,6 +134,14 @@ resource_types:
   "microsoft.network/networksecuritygroups":
     display_name: "Network Security Groups"
     promoted_fields:
+      - path: "properties.securityRules"
+        column: "security_rules"
+      - path: "properties.defaultSecurityRules"
+        column: "default_security_rules"
+      - path: "properties.networkInterfaces"
+        column: "associated_network_interfaces"
+      - path: "properties.subnets"
+        column: "associated_subnets"
       - path: "properties.provisioningState"
         column: "provisioning_state"
 
@@ -92,6 +150,8 @@ resource_types:
     promoted_fields:
       - path: "properties.state"
         column: "state"
+      - path: "properties.serverFarmId"
+        column: "app_service_plan_id"
       - path: "properties.httpsOnly"
         column: "https_only"
       - path: "properties.clientCertEnabled"
@@ -100,6 +160,12 @@ resource_types:
         column: "min_tls_version"
       - path: "properties.siteConfig.ftpsState"
         column: "ftps_state"
+      - path: "properties.siteConfig.linuxFxVersion"
+        column: "linux_fx_version"
+      - path: "properties.siteConfig.windowsFxVersion"
+        column: "windows_fx_version"
+      - path: "properties.publicNetworkAccess"
+        column: "public_network_access"
       - path: "identity.type"
         column: "managed_identity"
 
@@ -114,6 +180,8 @@ resource_types:
         column: "min_tls_version"
       - path: "properties.publicNetworkAccess"
         column: "public_network_access"
+      - path: "properties.privateEndpointConnections"
+        column: "private_endpoint_connections"
       - path: "properties.version"
         column: "version"
 
@@ -122,8 +190,12 @@ resource_types:
     promoted_fields:
       - path: "properties.status"
         column: "status"
+      - path: "properties.creationDate"
+        column: "created_time"
       - path: "properties.edition"
         column: "edition"
+      - path: "properties.currentServiceObjectiveName"
+        column: "service_objective"
       - path: "properties.maxSizeBytes"
         column: "max_size_bytes"
       - path: "sku.name"
@@ -228,10 +300,80 @@ resource_types:
     promoted_fields:
       - path: "sku.name"
         column: "sku"
+      - path: "sku.tier"
+        column: "sku_tier"
       - path: "properties.publicIPAllocationMethod"
         column: "allocation_method"
+      - path: "properties.publicIPAddressVersion"
+        column: "ip_version"
       - path: "properties.ipAddress"
         column: "ip_address"
+      - path: "properties.dnsSettings.fqdn"
+        column: "fqdn"
+      - path: "properties.ipConfiguration.id"
+        column: "associated_resource"
+
+  "microsoft.network/networkinterfaces":
+    display_name: "Network Interfaces"
+    promoted_fields:
+      - path: "properties.macAddress"
+        column: "mac_address"
+      - path: "properties.primary"
+        column: "primary"
+      - path: "properties.virtualMachine.id"
+        column: "virtual_machine_id"
+      - path: "properties.ipConfigurations"
+        column: "ip_configurations"
+      - path: "properties.networkSecurityGroup.id"
+        column: "network_security_group_id"
+      - path: "properties.dnsSettings.dnsServers"
+        column: "dns_servers"
+      - path: "properties.enableAcceleratedNetworking"
+        column: "accelerated_networking"
+      - path: "properties.enableIPForwarding"
+        column: "ip_forwarding"
+      - path: "properties.provisioningState"
+        column: "provisioning_state"
+
+  "microsoft.web/serverfarms":
+    display_name: "App Service Plans"
+    promoted_fields:
+      - path: "sku.name"
+        column: "sku"
+      - path: "sku.tier"
+        column: "sku_tier"
+      - path: "sku.size"
+        column: "sku_size"
+      - path: "sku.capacity"
+        column: "sku_capacity"
+      - path: "properties.status"
+        column: "status"
+      - path: "properties.numberOfSites"
+        column: "app_count"
+      - path: "properties.maximumNumberOfWorkers"
+        column: "max_workers"
+      - path: "properties.reserved"
+        column: "linux_reserved"
+      - path: "properties.zoneRedundant"
+        column: "zone_redundant"
+      - path: "properties.provisioningState"
+        column: "provisioning_state"
+
+  "microsoft.network/privateendpoints":
+    display_name: "Private Endpoints"
+    promoted_fields:
+      - path: "properties.privateLinkServiceConnections"
+        column: "private_link_service_connections"
+      - path: "properties.manualPrivateLinkServiceConnections"
+        column: "manual_private_link_service_connections"
+      - path: "properties.networkInterfaces"
+        column: "network_interfaces"
+      - path: "properties.subnet.id"
+        column: "subnet_id"
+      - path: "properties.customDnsConfigs"
+        column: "custom_dns_configs"
+      - path: "properties.provisioningState"
+        column: "provisioning_state"
 
   "microsoft.dbforpostgresql/flexibleservers":
     display_name: "PostgreSQL Flexible Servers"

@@ -2,10 +2,10 @@
 Resource collection module — dynamic, type-agnostic approach.
 
 Key design principle:
-  ARI uses one hardcoded module per resource type.
-  This module dynamically discovers ALL resource types in the tenant
-  and captures them generically. Type-specific enrichment (promoting
-  nested properties to named columns) is additive and configured via
+  Instead of one hardcoded module per resource type, this module
+  dynamically discovers ALL resource types in the tenant and captures
+  them generically. Type-specific enrichment (promoting nested
+  properties to named columns) is additive and configured via
   config/resource_enrichment.yaml — not required for collection.
 
 Any resource type with NO enrichment rule still appears in the

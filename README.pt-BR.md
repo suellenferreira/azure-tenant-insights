@@ -11,7 +11,7 @@
 ## Índice
 
 - [Visão Geral](#visão-geral)
-- [O que diferencia o ATI do ARI](#o-que-diferencia-o-ati-do-ari)
+- [Principais Recursos](#principais-recursos)
 - [Pré-requisitos](#pré-requisitos)
 - [Instalação](#instalação)
 - [Início Rápido](#início-rápido)
@@ -23,6 +23,8 @@
 - [Arquivos de Configuração](#arquivos-de-configuração)
 - [Ambientes de Nuvem Suportados](#ambientes-de-nuvem-suportados)
 - [Limitações](#limitações)
+- [Solução de Problemas](#solução-de-problemas)
+- [Contribuindo](#contribuindo)
 
 ---
 
@@ -40,24 +42,16 @@ Todos os dados são obtidos **exclusivamente de APIs oficiais do Azure** — Azu
 
 ---
 
-## O que diferencia o ATI do ARI
+## Principais Recursos
 
-O [Azure Resource Inventory (ARI)](https://github.com/microsoft/ARI) é uma ferramenta PowerShell amplamente utilizada para documentação Azure. O ATI é uma solução complementar em Python que endereça lacunas importantes:
-
-| Dimensão | ARI | ATI |
-|---|---|---|
-| **Linguagem** | PowerShell 7+ | Python 3.9+ |
-| **Cobertura de tipos de recurso** | Módulos estáticos por tipo (~80+ hardcoded) | **Dinâmica** — todos os tipos descobertos e capturados automaticamente |
-| **Novos tipos de recurso** | Atualização manual de módulo necessária | Capturados genericamente; enriquecimento é opcional e aditivo |
-| **Relatório HTML Executivo** | ❌ | ✅ |
-| **Relatório HTML Técnico** | ❌ | ✅ |
-| **Mapeamento para pilares WAF** | ❌ | ✅ via categorias do Azure Advisor |
-| **Detecção de misconfiguração** | ❌ | ✅ baseado em fontes oficiais |
-| **Conformidade com Policy** | Opcional | Sempre coletado |
-| **Detecção de recursos deprecados** | ❌ | ✅ baseado em anúncios oficiais de aposentadoria |
-| **Recursos Azure Arc** | Não explícito | Capturados via tipo `hybridcompute` |
-
-O ATI **não substitui o ARI** — ambas as ferramentas podem ser utilizadas em conjunto. O ATI estende a camada de análise com relatórios HTML, alinhamento WAF e cobertura dinâmica de tipos.
+- **Cobertura dinâmica de tipos de recurso** — todos os tipos do tenant são descobertos e capturados automaticamente. Novos tipos do Azure são tratados genericamente (sem alteração de código); o enriquecimento por tipo é opcional e aditivo via `config/resource_enrichment.yaml`.
+- **Excel estruturado multi-abas** — uma aba por tipo de recurso com enriquecimento declarativo, a tabela plana `AllResources`, uma aba de navegação **Index** (hyperlinks para todas as abas, com links de retorno por aba), uma coluna **Category** (Azure nativo / Híbrido-Arc / Migrate) e uma seção **Data Collection Notes**.
+- **Relatórios HTML duplos** — Executivo (score de risco, KPIs, cards de recomendações por prioridade, postura Zero Trust) e Técnico (findings por pilar WAF, policy, misconfigs, saúde, recursos deprecados); ambos autocontidos, com seções recolhíveis e tabelas utilizáveis offline.
+- **Mapeamento para pilares WAF** — recomendações do Advisor organizadas por pilar do Well-Architected Framework.
+- **Detecção de misconfiguração baseada em regras** — regras de fontes oficiais mapeadas para princípios Zero Trust.
+- **Conformidade de Policy e detecção de recursos deprecados** — recursos não conformes e correspondências a anúncios oficiais de aposentadoria do Azure.
+- **Postura do Defender for Cloud** — habilitação de planos por assinatura, cobertura por recurso de servidores e gap de cobertura com custo para proteger.
+- **100% somente leitura** — dados obtidos exclusivamente de APIs oficiais do Azure (Resource Graph, Advisor, Policy Insights, Resource Health e, opcionalmente, Defender e Cost Management).
 
 ---
 
@@ -254,9 +248,10 @@ Os relatórios gerados podem incluir metadados do tenant, IDs de assinatura, nom
 
 | Aba | Conteúdo |
 |---|---|
-| `Overview` | Resumo de KPIs, principais tipos de recurso, Advisor por pilar WAF |
+| `Overview` | Resumo de KPIs, principais tipos de recurso, Advisor por pilar WAF, **Resource Origin** (Azure nativo / Híbrido-Arc / Migrate) e **Data Collection Notes** |
+| `Index` | Aba de navegação (após `Overview`) com hyperlink para cada aba; cada aba possui um link **↩ Index** de retorno |
 | `Subscriptions` | Uma linha por assinatura com contagem de recursos |
-| `AllResources` | Tabela plana de TODOS os recursos em todos os tipos |
+| `AllResources` | Tabela plana de TODOS os recursos em todos os tipos, com uma coluna **Category** (Azure nativo / Híbrido-Arc / Migrate) |
 | `[TipoRecurso]` | Uma aba por tipo de recurso (ex.: `VirtualMachines`) |
 | `AdvisorFindings` | Todas as recomendações do Advisor com pilar WAF |
 | `PolicyCompliance` | Recursos não conformes com policies |
@@ -270,6 +265,8 @@ Os relatórios gerados podem incluir metadados do tenant, IDs de assinatura, nom
 | `DefenderCoverageGap` | Unidades faturáveis desprotegidas e **custo mensal para proteger** por plano (omitido com `--skip-defender`) |
 | `Costs` | Custo por resource group/serviço (omitido com `--skip-costs`) |
 
+> **Nomeação das abas:** os nomes das abas por tipo derivam dos display names configurados; um prefixo curto de namespace é adicionado **apenas** quando dois providers gerariam o mesmo nome (ex.: `Cmp-Virtualmachinetemplates` vs `VMw-Virtualmachinetemplates`). Todos os tipos ganham aba até o limite rígido de 255 do Excel; o restante permanece em `AllResources`. Um aviso por escopo é registrado quando há muitas abas de tipo (assinatura ≥ 40, management group ≥ 60, tenant ≥ 75; configurável por variável de ambiente).
+
 ### `*_Executive.html` — Relatório Executivo
 
 Arquivo HTML autocontido. Abrir em qualquer navegador moderno — **sem necessidade de internet** para os dados.
@@ -278,26 +275,29 @@ Arquivo HTML autocontido. Abrir em qualquer navegador moderno — **sem necessid
 - Tiles de KPI (recursos, assinaturas, findings críticos, deprecados, cobertura de tags)
 - Recomendações do Advisor por pilar WAF (gráfico de rosca)
 - Principais tipos de recurso (gráfico de barras)
-- Top 5 findings prioritários
+- Findings prioritários (5, ou até 10 em ambientes grandes)
 - Resumo da postura de planos Defender e **gap de cobertura** (unidades faturáveis desprotegidas + custo mensal estimado para proteger) *(se houver dados do Defender)*
-- Recomendações estratégicas
+- Recomendações estratégicas em **cards coloridos por prioridade**
+- Resumo da postura **Zero Trust** (colorido por princípio, com descrições)
 - Sinais de modernização *(rotulados como INFERIDO)*
+- Seções recolhíveis com **Expandir Tudo / Recolher Tudo**; link sutil para **Data Collection Notes**
 
 ### `*_Technical.html` — Relatório Técnico
 
 Arquivo HTML autocontido com navegação lateral.
 
-- Resumo do inventário de recursos
-- Findings por pilar WAF (abas por pilar)
+- Resumo do inventário de recursos; gráfico **Resources by Subscription** rotulado pelo nome da assinatura
+- Findings por pilar WAF (abas por pilar) com **carregamento progressivo** (30 linhas por vez; listas grandes remetem ao Excel) e **busca por coluna**
 - Violações de conformidade com Policy
 - Misconfigurations conhecidas (com link para documentação oficial)
 - Avaliações do Defender for Cloud *(omitido com `--skip-defender`)*
-- **Postura de planos** Defender (planos ligados/desligados por assinatura) e cobertura por recurso de servidores *(se houver dados do Defender)*
+- **Postura de planos** Defender (planos ligados/desligados por assinatura, com **busca por coluna**) e cobertura por recurso de servidores *(se houver dados do Defender)*
 - Tabela de **gap de cobertura e custo para proteger** (unidades faturáveis desprotegidas × preço unitário por plano) *(se houver dados do Defender)*
 - Eventos de saúde dos recursos
 - Recursos deprecados/em processo de aposentadoria com links de migração
 - Observações de Landing Zone *(rotuladas como INFERIDO)*
 - Recursos Azure Arc *(se presentes)*
+- Seções recolhíveis com **Expandir Tudo / Recolher Tudo**; link sutil para **Data Collection Notes**
 
 ---
 
@@ -395,6 +395,36 @@ Define verificações de configuração para tipos de recurso específicos. Toda
 - **Gráficos requerem internet:** O Chart.js é carregado via CDN. Todas as tabelas de dados são exibidas sem internet.
 - **Apenas ponto no tempo:** O ATI produz snapshots. A análise de tendências requer execuções regulares agendadas.
 - **Sinais de modernização são INFERIDOS:** Nenhuma API oficial do Azure retorna uma pontuação de prontidão para IA ou modernização. O ATI infere esses sinais apenas a partir dos tipos de recurso detectados.
+
+---
+
+## Solução de Problemas
+
+| Sintoma | Causa provável | Solução |
+|---|---|---|
+| `Authentication failed` / nenhuma subscription encontrada | Sem login, ou tenant errado | Rode `az login` (ou `az login --tenant <ID>`); confirme com `az account show` |
+| `AuthorizationFailed` / `403` no log para alguns dados | RBAC ausente em uma subscription | Garanta ao menos `Reader`; adicione `Security Reader` (Defender) / `Cost Management Reader` (custos), ou use `--skip-defender` / `--skip-costs` |
+| Scan lento ou log `429 TooManyRequests` | Throttling do Resource Graph | Aumente `--throttle-delay` (ex.: `2.0`); reduza o escopo com `--subscription-id` ou `--management-group` |
+| Execução demorada | O escopo padrão é **todas** as subscriptions do tenant | Reduza o escopo, ou passe `-y` para pular a confirmação |
+| Trava no prompt "Custom Report Name" em CI | Sem terminal interativo (TTY) | Passe `--report-name <NOME>` ou `-y` (ambos pulam o prompt) |
+| Gráficos não renderizam | Offline / CDN bloqueada | As tabelas funcionam offline; os gráficos precisam de `cdn.jsdelivr.net` |
+| Logs HTTP muito verbosos | `--debug` habilitado | Omita `--debug`; o SDK do Azure oculta tokens como `REDACTED` |
+
+> **Autenticação via Service Principal** lê `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` do **ambiente**. Exporte essas variáveis (ou simplesmente use `az login`) — um arquivo `.env` não é carregado automaticamente.
+
+---
+
+## Contribuindo
+
+1. Faça um fork do repositório
+2. Crie um branch de feature: `git checkout -b feature/minha-melhoria`
+3. Faça as alterações e teste em uma subscription Azure real
+4. Abra um Pull Request com uma descrição clara
+
+Para adicionar uma nova regra de misconfiguração, edite `config/misconfiguration_rules.yaml` e forneça:
+- Um `id` único
+- Uma referência à documentação oficial da Microsoft em `documentation_url`
+- O `condition_path` e o `expected_value` exatos, baseados na documentação oficial da API
 
 ---
 

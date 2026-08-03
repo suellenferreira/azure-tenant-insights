@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "azure-tenant-insights"
@@ -24,12 +24,12 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "azure-identity>=1.15.0",
-    "azure-mgmt-resourcegraph>=8.0.0",
-    "azure-mgmt-subscription>=3.1.1",
-    "requests>=2.31.0",
-    "openpyxl>=3.1.2",
-    "pyyaml>=6.0.1",
+    "azure-identity>=1.15.0,<2",
+    "azure-mgmt-resourcegraph>=8.0.0,<9",
+    "azure-mgmt-subscription>=3.1.1,<4",
+    "requests>=2.31.0,<3",
+    "openpyxl>=3.1.2,<4",
+    "pyyaml>=6.0.1,<7",
 ]
 
 [project.scripts]
@@ -39,6 +39,9 @@ invoke-ati = "invoke_ati:main"
 Homepage = "https://github.com/suellenferreira/azure-tenant-insights"
 Documentation = "https://github.com/suellenferreira/azure-tenant-insights/blob/main/README.md"
 Issues = "https://github.com/suellenferreira/azure-tenant-insights/issues"
+
+[tool.setuptools]
+py-modules = ["invoke_ati"]
 
 [tool.setuptools.packages.find]
 include = ["collectors*", "processors*", "writers*"]

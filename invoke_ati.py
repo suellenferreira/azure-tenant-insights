@@ -189,13 +189,19 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Interactive report naming (Item 4: Optional custom report name) ──
+    # ── Report naming (Item 4: Optional custom report name) ──
     if args.report_name:
         base_report_name = args.report_name
+    elif args.yes or not sys.stdin.isatty():
+        # Non-interactive (CI / --yes / no TTY): use the default without prompting.
+        base_report_name = "ATI_Report"
     else:
         print("\n📋 Custom Report Name (optional)")
         print("   Press Enter to use default 'ATI_Report', or type a custom name:")
-        custom_name = input("   > ").strip()
+        try:
+            custom_name = input("   > ").strip()
+        except EOFError:
+            custom_name = ""
         base_report_name = custom_name if custom_name else "ATI_Report"
         if custom_name:
             print(f"   ✓ Report name: {base_report_name}\n")
@@ -448,6 +454,11 @@ def main() -> None:
                 "tenant_name": tenant_name,
                 "subscriptions": subscriptions,
                 "subscription_count": len(subscriptions),
+                "scan_scope": (
+                    "management-group" if args.management_group
+                    else "subscription" if args.subscription_id
+                    else "tenant"
+                ),
                 "total_resources": total_resources,
                 "cloud": args.cloud,
                 "report_name": report_prefix,

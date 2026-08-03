@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Excel Navigation, Category & Report UX (Phase C)**
+- Excel: new **`Index`** navigation sheet (after `Overview`) with a hyperlink to every tab, plus a **↩ Index** back-link on each sheet.
+- Excel: collision-free, namespace-aware per-type sheet names — a short provider prefix is added only when two providers would otherwise produce the same name (e.g. `Cmp-Virtualmachinetemplates` vs `VMw-Virtualmachinetemplates`).
+- Excel: all resource types get a sheet up to Excel's 255-sheet limit (the rest stay in `AllResources`), with scope-aware sheet-count warnings (subscription ≥ 40, management group ≥ 60, tenant ≥ 75; env-overridable) and a hard warning at 200.
+- Excel: new **`Category`** column in `AllResources` and a **Resource Origin** summary in `Overview` (Azure-native / Hybrid-Arc / Migrate).
+- Excel: **Data Collection Notes** section in `Overview`, mirroring the HTML reports.
+- Executive HTML: collapsible sections with Expand All / Collapse All, priority-colored recommendation cards, color-coded Zero Trust posture with descriptions, and a link to the Data Collection Notes.
+- Technical HTML: **Resources by Subscription** chart labeled by subscription name; WAF findings tables with progressive loading (30 at a time, up to 300 per pillar; full list in the Excel export); column search on the Defender Plans by Subscription table; link to the Data Collection Notes.
+
+**Robustness & Packaging (Phase C)**
+- `collectors/resource_graph.py`: subscriptions are queried in chunks of up to 1000 (Resource Graph per-request limit) instead of silently dropping the excess.
+- `invoke_ati.py`: the report-name prompt is skipped in non-interactive runs (`--yes` or no TTY), defaulting to `ATI_Report`.
+- `pyproject.toml`: fixed build backend (`setuptools.build_meta`), packaged the `invoke_ati` entry module (`py-modules`), and added upper version bounds to dependencies for reproducible installs.
+- Documentation: README (EN/PT-BR/ES) and `DOCUMENTATION.md` updated for the new features and given a Troubleshooting section; removed the ARI comparison section.
+
 **Enhanced Excel Inventory (Phase A/B)**
 - `AllResources` now includes common Azure Resource Graph / ARM inventory columns such as display type, subscription name, tenant ID, SKU details, provisioning state, created time, identity type, zones, resource ID, and raw properties.
 - `Subscriptions` now summarizes resource inventory by subscription, resource group, location, and resource type instead of only listing one row per subscription.

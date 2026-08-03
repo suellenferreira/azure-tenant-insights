@@ -78,8 +78,13 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
 
     # Chart data
     resources_by_sub = summary.get("resources_by_subscription", {})
-    sub_labels = json.dumps(list(resources_by_sub.keys())[:10])
-    sub_values = json.dumps(list(resources_by_sub.values())[:10])
+    _sub_name_map = {
+        s.get("subscriptionId", ""): (s.get("displayName") or s.get("subscriptionId", ""))
+        for s in subscriptions
+    }
+    _sub_items = list(resources_by_sub.items())[:10]
+    sub_labels = json.dumps([_sub_name_map.get(k) or k for k, _ in _sub_items])
+    sub_values = json.dumps([v for _, v in _sub_items])
 
     misconfig_sev = summary.get("misconfig_by_severity", {})
     sev_labels = json.dumps(list(misconfig_sev.keys()))
@@ -150,14 +155,17 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
             for w in collection_warnings
         )
         warnings_html = (
-            f'<details style="font-size:.73rem;color:#aaa;margin-top:.6rem;text-align:left">'
-            f'<summary style="cursor:pointer">&#9432; Data collection notes '
+            f'<details id="data-collection-notes" style="font-size:.73rem;color:#aaa;margin-top:.6rem;text-align:left">'
+            f'<summary style="cursor:pointer">&#9432; Data Collection Notes '
             f'({len(collection_warnings)})</summary>'
             f'<ul style="margin:.4rem 0 0 1rem;color:#999">{_warn_items}</ul>'
             f'</details>'
         )
     else:
-        warnings_html = ""
+        warnings_html = (
+            f'<div id="data-collection-notes" style="font-size:.73rem;color:#aaa;margin-top:.6rem">'
+            f'&#9432; Data Collection Notes: no collection warnings recorded for this scan.</div>'
+        )
 
     zerotrust_html = _zero_trust_section(misconfig_findings, resources_by_type, summary)
     html = _render_html(
@@ -383,6 +391,11 @@ def _inventory_section(summary: dict) -> str:
         <tbody>{rows}</tbody></table></div>"""
 
 
+# Max WAF rows rendered into the HTML DOM per pillar; the remainder is available in
+# the Excel export. Rendered rows are revealed progressively (see data-paginate below).
+_WAF_MAX_ROWS = 300
+
+
 def _waf_section(waf_findings: dict) -> str:
     tabs = '<div class="tab-bar">'
     contents = ""
@@ -421,7 +434,7 @@ def _waf_section(waf_findings: dict) -> str:
         )
         rows = ""
         if sorted_recs:
-            for rec in sorted_recs[:200]:
+            for rec in sorted_recs[:_WAF_MAX_ROWS]:
                 impact = rec.get("impact", "")
                 ic = {"High": "#C00000", "Medium": "#FFC000", "Low": "#70AD47"}.get(impact, "#ccc")
                 rows += (
@@ -433,6 +446,12 @@ def _waf_section(waf_findings: dict) -> str:
                     f'<td>{rec.get("subscriptionId","")}</td>'
                     f'<td>{rec.get("resourceGroup","")}</td></tr>'
                 )
+            if len(sorted_recs) > _WAF_MAX_ROWS:
+                rows += (
+                    f'<tr class="pg-note"><td colspan="6" style="text-align:center;color:#888;font-style:italic;padding:.55rem;background:#fbfbfb">'
+                    f'\u2139 Showing the first {_WAF_MAX_ROWS:,} of {len(sorted_recs):,} {pillar} recommendations. '
+                    f'For the complete list, use the <strong>Excel export</strong> (AllResources / per-type sheets).</td></tr>'
+                )
         else:
             rows = f'<tr><td colspan="6" class="no-data">No {pillar} recommendations found.</td></tr>'
 
@@ -442,7 +461,7 @@ def _waf_section(waf_findings: dict) -> str:
             f'<strong style="color:{color}">{icon} {pillar}</strong>'
             f' — {count} Azure Advisor recommendation(s) '
             f'<span style="margin-left:.5rem;color:#555;font-size:.79rem">({impacts_txt})</span></div>'
-            f'<div class="table-scroll"><table class="dtable" id="{waf_tid}">'
+            f'<div class="table-scroll"><table class="dtable" id="{waf_tid}" data-paginate="30" data-page-step="30">'
             f'<thead><tr><th>Impact</th><th>Resource Type</th><th>Resource</th>'
             f'<th>Recommendation</th><th>Subscription</th><th>RG</th></tr>'
             f'{waf_filter_row}</thead>'
@@ -1053,15 +1072,28 @@ def _build_defender_posture_section_html(
             f'<td style="font-size:.76rem;color:#666">{exts_str}</td></tr>'
         )
 
+    plan_filter_row = (
+        '<tr class="filter-row">'
+        + "".join(
+            f'<th style="padding:.2rem .4rem;background:#e8f4f8"><input class="filter-input" '
+            f'data-tbl="tbl-defender-plans" placeholder="&#8981; {lbl}..." '
+            f'oninput="filterCol(this,\'tbl-defender-plans\',{i})"></th>'
+            for i, lbl in enumerate(
+                ["Subscription", "Sub ID", "Plan", "Tier", "Sub-plan", "Coverage", "Extensions"]
+            )
+        )
+        + '</tr>'
+    )
     plan_table = (
         f'<div style="margin:1.2rem 0">'
         f'<strong style="font-size:.9rem;color:#1F4E79">Defender Plans by Subscription</strong>'
         f'<p class="note" style="margin:.3rem 0 .5rem">Subscription-level plan enablement '
         f'(<code>Microsoft.Security/pricings</code>). For non-server workloads, status is '
         f'reported at the subscription scope only.</p>'
-        f'<div class="table-scroll"><table class="dtable">'
+        f'<div class="table-scroll"><table class="dtable" id="tbl-defender-plans">'
         f'<thead><tr><th>Subscription</th><th>Subscription ID</th><th>Defender Plan</th>'
-        f'<th>Tier</th><th>Sub-plan</th><th>Coverage</th><th>Enabled Extensions</th></tr></thead>'
+        f'<th>Tier</th><th>Sub-plan</th><th>Coverage</th><th>Enabled Extensions</th></tr>'
+        f'{plan_filter_row}</thead>'
         f'<tbody>{plan_table_rows}</tbody></table></div></div>'
     )
 
@@ -1402,6 +1434,12 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 .ctrl-btn:hover{{background:#2E86AB;color:#fff}}
 .filter-input{{width:100%;padding:.22rem .4rem;border:1px solid #ccc;border-radius:4px;font-size:.74rem;color:#333;box-sizing:border-box}}
 .filter-input:focus{{outline:none;border-color:#2E86AB;background:#f0f8ff}}
+.pg-bar{{display:flex;align-items:center;gap:.6rem;margin:.5rem 0 .2rem;flex-wrap:wrap}}
+.pg-btn{{padding:.28rem .9rem;border:1.5px solid #2E86AB;background:#2E86AB;color:#fff;border-radius:16px;cursor:pointer;font-size:.78rem;font-weight:600;transition:all .2s}}
+.pg-btn:hover{{background:#1F4E79;border-color:#1F4E79}}
+.pg-btn.ghost{{background:#fff;color:#2E86AB}}
+.pg-btn.ghost:hover{{background:#eaf3fa}}
+.pg-info{{font-size:.75rem;color:#888}}
 </style>
 </head>
 <body>
@@ -1436,6 +1474,7 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
     <span>📋 Subscriptions: <strong>{subscriptions_list}</strong></span>
     <span>📦 Resources: <strong>{kpi.get('total_resources',0):,}</strong></span>
     <span>🔢 Types: <strong>{kpi.get('total_resource_types',0)}</strong></span>
+    <span style="opacity:.6;font-size:.72rem;align-self:center">&#9432; Collection details at end &mdash; <a href="#data-collection-notes" style="color:#a8c6e0;text-decoration:underline">Data Collection Notes</a></span>
   </div>
   <div class="container">
     <div class="ctrl-bar"><button class="ctrl-btn" onclick="expandAll()">&#8862; Expand All</button><button class="ctrl-btn" onclick="collapseAll()">&#8863; Collapse All</button></div>
@@ -1596,8 +1635,17 @@ function collapseAll(){{
   document.querySelectorAll('.section-body').forEach(function(b){{b.style.display='none';}});
   document.querySelectorAll('.toggle-btn').forEach(function(b){{b.innerHTML='&#8963;';}});
 }}
-// ── Table column filters ───────────────────────────────────────────────────
+// ── Table column filters + progressive pagination ──────────────────────────
 var _tblFilters={{}};
+var _pageState={{}};
+function _dataRows(tbl){{
+  return Array.prototype.filter.call(tbl.querySelectorAll('tbody tr'),function(r){{
+    return !r.classList.contains('filter-row')&&!r.classList.contains('pg-note');
+  }});
+}}
+function _hasActiveFilters(tableId){{
+  var f=_tblFilters[tableId]||{{}};for(var k in f){{if(f[k])return true;}}return false;
+}}
 function filterCol(input,tableId,colIdx){{
   if(!_tblFilters[tableId])_tblFilters[tableId]={{}};
   _tblFilters[tableId][colIdx]=input.value.trim().toLowerCase();
@@ -1607,8 +1655,11 @@ function _applyFilters(tableId){{
   var tbl=document.getElementById(tableId);
   if(!tbl)return;
   var filters=_tblFilters[tableId]||{{}};
+  var pg=_pageState[tableId];
+  if(!_hasActiveFilters(tableId)&&pg){{_renderPage(tableId);_togglePgBar(tableId,true);return;}}
+  if(pg)_togglePgBar(tableId,false);
   tbl.querySelectorAll('tbody tr').forEach(function(row){{
-    if(row.classList.contains('filter-row'))return;
+    if(row.classList.contains('filter-row')||row.classList.contains('pg-note'))return;
     var cells=row.querySelectorAll('td');
     var show=true;
     for(var col in filters){{
@@ -1618,5 +1669,40 @@ function _applyFilters(tableId){{
     row.style.display=show?'':'none';
   }});
 }}
+function initPaginated(){{
+  document.querySelectorAll('table[data-paginate]').forEach(function(tbl){{
+    var id=tbl.id;if(!id)return;
+    var size=parseInt(tbl.getAttribute('data-paginate'),10)||30;
+    var step=parseInt(tbl.getAttribute('data-page-step'),10)||size;
+    _pageState[id]={{size:size,step:step,shown:size}};
+    var bar=document.createElement('div');
+    bar.className='pg-bar';bar.id='pgbar-'+id;
+    var wrap=tbl.closest('.table-scroll')||tbl;
+    wrap.parentNode.insertBefore(bar,wrap.nextSibling);
+    _renderPage(id);
+  }});
+}}
+function _renderPage(id){{
+  var tbl=document.getElementById(id);var st=_pageState[id];if(!tbl||!st)return;
+  var rows=_dataRows(tbl);var total=rows.length;
+  rows.forEach(function(r,i){{r.style.display=(i<st.shown)?'':'none';}});
+  var bar=document.getElementById('pgbar-'+id);if(!bar)return;
+  bar.innerHTML='';
+  if(st.shown>=total){{
+    var sa=document.createElement('span');sa.className='pg-info';sa.textContent='Showing all '+total+' row(s)';bar.appendChild(sa);
+    return;
+  }}
+  var next=Math.min(st.step,total-st.shown);
+  var b1=document.createElement('button');b1.className='pg-btn';b1.innerHTML='&#9660; Load '+next+' more';
+  b1.addEventListener('click',function(){{loadMore(id);}});
+  var b2=document.createElement('button');b2.className='pg-btn ghost';b2.textContent='Show all ('+total+')';
+  b2.addEventListener('click',function(){{loadAll(id);}});
+  var si=document.createElement('span');si.className='pg-info';si.textContent='Showing '+st.shown+' of '+total;
+  bar.appendChild(b1);bar.appendChild(b2);bar.appendChild(si);
+}}
+function loadMore(id){{var st=_pageState[id];if(!st)return;st.shown+=st.step;_renderPage(id);}}
+function loadAll(id){{var st=_pageState[id];var tbl=document.getElementById(id);if(!st||!tbl)return;st.shown=_dataRows(tbl).length;_renderPage(id);}}
+function _togglePgBar(id,show){{var bar=document.getElementById('pgbar-'+id);if(bar)bar.style.display=show?'':'none';}}
+document.addEventListener('DOMContentLoaded',initPaginated);
 </script>
 </body></html>"""

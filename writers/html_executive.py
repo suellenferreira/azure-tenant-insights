@@ -91,14 +91,17 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
             for w in collection_warnings
         )
         warnings_html = (
-            f'<details style="font-size:.73rem;color:#aaa;margin-top:.6rem;text-align:left">'
-            f'<summary style="cursor:pointer">&#9432; Data collection notes '
+            f'<details id="data-collection-notes" style="font-size:.73rem;color:#aaa;margin-top:.6rem;text-align:left">'
+            f'<summary style="cursor:pointer">&#9432; Data Collection Notes '
             f'({len(collection_warnings)})</summary>'
             f'<ul style="margin:.4rem 0 0 1rem;color:#999">{_warn_items}</ul>'
             f'</details>'
         )
     else:
-        warnings_html = ""
+        warnings_html = (
+            f'<div id="data-collection-notes" style="font-size:.73rem;color:#aaa;margin-top:.6rem">'
+            f'&#9432; Data Collection Notes: no collection warnings recorded for this scan.</div>'
+        )
 
     lz_exec_html = _build_lz_executive_html(resources_by_type, summary)
     defender_exec_html = _build_defender_executive_html(defender_data, resources_by_type, summary)
@@ -505,41 +508,61 @@ def _build_defender_executive_html(defender_data: list, resources_by_type: dict,
 
 
 def _build_zero_trust_executive_html(misconfig_findings: list) -> str:
-    """Condensed Zero Trust summary for executive report."""
-    principle_rules = {
-        "Verify Explicitly": {"STG-001", "STG-003", "APP-001", "APP-002", "APP-003", "SQL-002", "REDIS-001", "REDIS-002"},
-        "Use Least Privilege": {"KV-001", "KV-002", "AKS-001"},
-        "Assume Breach": {"STG-002", "STG-004", "SQL-001", "KV-003", "COSMOS-001", "REDIS-003", "PG-001", "MYSQL-001"},
+    """Condensed Zero Trust summary for executive report (colored cards + descriptions)."""
+    _ZT = {
+        "Verify Explicitly": {
+            "rules": {"STG-001", "STG-003", "APP-001", "APP-002", "APP-003", "SQL-002", "REDIS-001", "REDIS-002"},
+            "desc": ("Every request must be authenticated, authorized, and validated. "
+                     "Findings indicate resources accepting unencrypted or weakly-authenticated connections."),
+            "icon": "\U0001f510", "color": "#1F4E79", "bg": "#e8f0fe",
+        },
+        "Use Least Privilege": {
+            "rules": {"KV-001", "KV-002", "AKS-001"},
+            "desc": ("Limit access with just-in-time and just-enough-access controls. "
+                     "Findings indicate missing RBAC or data protection controls."),
+            "icon": "\U0001f511", "color": "#7030A0", "bg": "#f3e8ff",
+        },
+        "Assume Breach": {
+            "rules": {"STG-002", "STG-004", "SQL-001", "KV-003", "COSMOS-001", "REDIS-003", "PG-001", "MYSQL-001"},
+            "desc": ("Minimize blast radius \u2014 segment access and reduce public exposure. "
+                     "Findings indicate resources exposed to the public internet."),
+            "icon": "\U0001f3f9", "color": "#C00000", "bg": "#fde8e8",
+        },
     }
-    grouped = {k: [] for k in principle_rules}
+    grouped = {k: [] for k in _ZT}
     for finding in misconfig_findings:
         rid = finding.get("ruleId", "")
-        for principle, rules in principle_rules.items():
-            if rid in rules:
+        for principle, cfg in _ZT.items():
+            if rid in cfg["rules"]:
                 grouped[principle].append(finding)
                 break
 
     cards = ""
     total = 0
-    for principle in ["Verify Explicitly", "Use Least Privilege", "Assume Breach"]:
+    for principle, cfg in _ZT.items():
         findings = grouped[principle]
         total += len(findings)
+        color = cfg["color"]
+        bg = cfg["bg"]
         sev = Counter((f.get("severity") or "Unknown") for f in findings)
         sev_txt = ", ".join(
             f"{s}: {sev.get(s, 0):,}" for s in ["Critical", "High", "Medium", "Low"] if sev.get(s, 0) > 0
         ) or "No findings"
         cards += (
-            '<div style="background:#f8fbff;border:1px solid #dbe7f3;border-radius:10px;padding:.9rem 1rem">'
-            f'<div style="font-weight:700;color:#1F4E79;font-size:.9rem">{principle}</div>'
-            f'<div style="font-size:1.55rem;font-weight:700;color:#1F4E79;line-height:1.2">{len(findings):,}</div>'
-            f'<div style="font-size:.78rem;color:#666">{sev_txt}</div>'
+            f'<div style="background:{bg};border-radius:10px;padding:1rem 1.1rem;border-top:4px solid {color}">'
+            f'<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">'
+            f'<span style="font-size:1.3rem">{cfg["icon"]}</span>'
+            f'<div style="font-weight:700;color:{color};font-size:.92rem">{principle}</div></div>'
+            f'<div style="font-size:.75rem;color:#555;line-height:1.4;margin-bottom:.6rem;min-height:2.6em">{cfg["desc"]}</div>'
+            f'<div style="font-size:1.7rem;font-weight:700;color:{color};line-height:1.1">{len(findings):,}</div>'
+            f'<div style="font-size:.77rem;color:#666">{sev_txt}</div>'
             '</div>'
         )
 
     return (
         f'<div style="font-size:.85rem;color:#555;margin-bottom:.7rem">'
         f'Zero Trust mapping from misconfiguration findings. Total mapped findings: <strong>{total:,}</strong>.</div>'
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.8rem">'
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.8rem">'
         f'{cards}'
         '</div>'
     )
@@ -566,14 +589,15 @@ def _render_html(
         for f in top_findings
     ) or '<p class="no-data">No critical findings detected. Environment appears healthy.</p>'
 
+    PRI_ICON = {"Critical": "\U0001f534", "High": "\U0001f7e0", "Medium": "\U0001f7e1", "Low": "\U0001f7e2"}
     recs_html = "".join(
-        f"""<div class="rec-card">
+        f"""<div class="rec-card" style="border-left:5px solid {PRI_COLORS.get(r.get('priority',''),'#999')}">
             <div class="rec-header">
-                <span class="badge" style="background:{PRI_COLORS.get(r.get('priority',''),'#999')}">{r.get('priority','')}</span>
+                <span class="badge" style="background:{PRI_COLORS.get(r.get('priority',''),'#999')}">{PRI_ICON.get(r.get('priority',''),'')} {r.get('priority','')}</span>
                 <span class="rec-area">{r.get('area','')}</span>
             </div>
             <p class="rec-text">{r.get('text','')}</p>
-            <p class="rec-action"><strong>Action:</strong> {r.get('action','')}</p>
+            <p class="rec-action"><strong>\u27a4 Action:</strong> {r.get('action','')}</p>
         </div>"""
         for r in strategic_recs
     )
@@ -633,6 +657,12 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 .signal-msg{{font-size:.88rem;color:#333}}
 .alert-critical{{background:#fde8e8;border-left:4px solid #C00000;color:#7b0000;padding:1rem 1.2rem;border-radius:8px;margin:.8rem 0}}
 .no-data{{color:#888;font-style:italic;padding:.5rem 0}}
+.ctrl-bar{{display:flex;gap:.6rem;margin:0 0 1rem;padding:.5rem 0}}
+.ctrl-btn{{padding:.35rem 1rem;border:1.5px solid #2E86AB;background:#fff;color:#2E86AB;border-radius:20px;cursor:pointer;font-size:.82rem;font-weight:600;transition:all .2s}}
+.ctrl-btn:hover{{background:#2E86AB;color:#fff}}
+.toggle-btn{{background:none;border:1.5px solid #2E86AB;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:.85rem;line-height:24px;text-align:center;color:#2E86AB;margin-left:.5rem;flex-shrink:0;transition:all .2s;padding:0;float:right}}
+.toggle-btn:hover{{background:#2E86AB;color:#fff}}
+.rec-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}}
 .footer{{text-align:center;padding:2rem;color:#888;font-size:.82rem}}
 .report-badge{{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);padding:.25rem 1rem;border-radius:20px;font-size:.82rem;display:inline-block;margin-top:.5rem}}
 @media(max-width:768px){{.two-col{{grid-template-columns:1fr}}.kpi-grid{{grid-template-columns:repeat(2,1fr)}}}}
@@ -649,8 +679,10 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
   <span>🏢 Tenant: <strong>{tenant_name}</strong> ({tenant_id})</span>
   <span>📋 Subscriptions: <strong>{subscriptions_list}</strong></span>
   <span>⚙ Generated by: <strong>Azure Tenant Insights v1.0.0</strong></span>
+  <span style="opacity:.6;font-size:.72rem;align-self:center">&#9432; Collection details at end &mdash; <a href="#data-collection-notes" style="color:#a8c6e0;text-decoration:underline">Data Collection Notes</a></span>
 </div>
 <div class="container">
+  <div class="ctrl-bar"><button class="ctrl-btn" onclick="expandAll()">&#8862; Expand All</button><button class="ctrl-btn" onclick="collapseAll()">&#8863; Collapse All</button></div>
   {dep_alert}
   <div class="risk-banner">Overall Environment Risk Level: {risk_level}</div>
 
@@ -675,7 +707,7 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
   <div class="section"><h2>🌍 Active Regions Distribution</h2><div class="chart-box" style="height:250px"><canvas id="regionChart"></canvas></div></div>
 
   <div class="section"><h2>Top Priority Findings</h2>{findings_html}</div>
-  <div class="section"><h2>Strategic Recommendations</h2>{recs_html}</div>
+  <div class="section"><h2>Strategic Recommendations</h2><div class="rec-grid">{recs_html}</div></div>
   <div class="section">
     <h2>🏗 Landing Zone Observations
       <small style="font-size:.72rem;color:#888;font-weight:normal;margin-left:.5rem">(Condensed — top action items. See Technical Report for full analysis.)</small>
@@ -730,5 +762,38 @@ const typeCtx=document.getElementById('typeChart')?.getContext('2d');
 if(typeCtx){{new Chart(typeCtx,{{type:'bar',data:{{labels:{type_labels},datasets:[{{label:'Count',data:{type_values},backgroundColor:'#2E86AB',borderRadius:4}}]}},options:{{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{{legend:{{display:false}}}},scales:{{x:{{grid:{{display:false}}}},y:{{grid:{{display:false}}}}}}}}}})}};
 const regionCtx=document.getElementById('regionChart')?.getContext('2d');
 if(regionCtx){{new Chart(regionCtx,{{type:'bar',data:{{labels:{region_summary['region_labels']},datasets:[{{label:'Resources',data:{region_summary['region_values']},backgroundColor:'#70AD47',borderRadius:4}}]}},options:{{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{{legend:{{display:false}}}},scales:{{x:{{grid:{{display:false}}}},y:{{grid:{{display:false}}}}}}}}}})}};
+// ── Section collapse / expand (auto-inject toggle buttons) ─────────────────
+document.addEventListener('DOMContentLoaded',function(){{
+  document.querySelectorAll('.container > .two-col > .section, .container > .section').forEach(function(sec){{
+    var h2=sec.querySelector('h2');
+    if(!h2)return;
+    var btn=document.createElement('button');
+    btn.className='toggle-btn';
+    btn.innerHTML='&#8964;';
+    btn.title='Toggle section';
+    btn.addEventListener('click',function(e){{e.stopPropagation();toggleSection(sec);}});
+    h2.appendChild(btn);
+    var body=document.createElement('div');
+    body.className='section-body';
+    var nxt=h2.nextSibling;
+    while(nxt){{var tmp=nxt.nextSibling;body.appendChild(nxt);nxt=tmp;}}
+    sec.appendChild(body);
+  }});
+}});
+function toggleSection(sec){{
+  var body=sec.querySelector('.section-body');
+  var btn=sec.querySelector('.toggle-btn');
+  if(!body||!btn)return;
+  if(body.style.display==='none'){{body.style.display='';btn.innerHTML='&#8964;';}}
+  else{{body.style.display='none';btn.innerHTML='&#8963;';}}
+}}
+function expandAll(){{
+  document.querySelectorAll('.section-body').forEach(function(b){{b.style.display='';}});
+  document.querySelectorAll('.toggle-btn').forEach(function(b){{b.innerHTML='&#8964;';}});
+}}
+function collapseAll(){{
+  document.querySelectorAll('.section-body').forEach(function(b){{b.style.display='none';}});
+  document.querySelectorAll('.toggle-btn').forEach(function(b){{b.innerHTML='&#8963;';}});
+}}
 </script>
 </body></html>"""

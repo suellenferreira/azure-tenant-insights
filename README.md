@@ -11,7 +11,7 @@
 ## Table of Contents
 
 - [Overview](#overview)
-- [What Makes ATI Different from ARI](#what-makes-ati-different-from-ari)
+- [Key Capabilities](#key-capabilities)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
@@ -23,6 +23,7 @@
 - [Configuration Files](#configuration-files)
 - [Supported Cloud Environments](#supported-cloud-environments)
 - [Limitations](#limitations)
+- [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 
 ---
@@ -41,24 +42,16 @@ All data is sourced **exclusively from official Azure APIs** — Azure Resource 
 
 ---
 
-## What Makes ATI Different from ARI
+## Key Capabilities
 
-[Azure Resource Inventory (ARI)](https://github.com/microsoft/ARI) is a widely used PowerShell tool for Azure documentation. ATI is a complementary Python-based solution that addresses key gaps:
-
-| Dimension | ARI | ATI |
-|---|---|---|
-| **Language** | PowerShell 7+ | Python 3.9+ |
-| **Resource type coverage** | Static modules per type (~80+ hardcoded) | **Dynamic** — all types discovered and captured automatically |
-| **New resource type handling** | Manual module update required | Captured generically; enrichment is additive and optional |
-| **Executive HTML report** | ❌ | ✅ |
-| **Technical HTML report** | ❌ | ✅ |
-| **WAF pillar mapping** | ❌ | ✅ via Azure Advisor categories |
-| **Misconfiguration detection** | ❌ | ✅ rules-based, official sources only |
-| **Policy compliance** | Optional | Always collected |
-| **Deprecated resource detection** | ❌ | ✅ based on official retirement announcements |
-| **Azure Arc resources** | Not explicit | Captured via `hybridcompute` type |
-
-ATI **does not replace ARI** — both tools can be used together. ATI extends the analysis layer with HTML reports, WAF alignment, and dynamic type coverage.
+- **Dynamic resource-type coverage** — every resource type in the tenant is discovered and captured automatically. New Azure types are handled generically (no code change); per-type enrichment is optional and additive via `config/resource_enrichment.yaml`.
+- **Structured multi-sheet Excel** — one sheet per resource type with declarative property enrichment, a flat `AllResources` table, an **Index** navigation sheet (hyperlinks to every tab, with per-sheet back-links), a **Category** column (Azure-native / Hybrid-Arc / Migrate), and a **Data Collection Notes** section.
+- **Dual HTML reports** — an Executive report (risk score, KPIs, priority-colored recommendation cards, Zero Trust posture) and a Technical report (WAF pillar findings, policy, misconfigs, health, deprecated resources); both self-contained, with collapsible sections and offline-friendly tables.
+- **WAF pillar mapping** — Advisor recommendations organized by Well-Architected Framework pillar.
+- **Rules-based misconfiguration detection** — official-source rules mapped to Zero Trust principles.
+- **Policy compliance & deprecated-resource detection** — non-compliant resources and matches against official Azure retirement announcements.
+- **Defender for Cloud posture** — plan enablement per subscription, per-resource server coverage, and coverage-gap cost-to-protect.
+- **100% read-only** — sourced exclusively from official Azure APIs (Resource Graph, Advisor, Policy Insights, Resource Health, optionally Defender and Cost Management).
 
 ---
 
@@ -270,9 +263,10 @@ Three files are generated per run:
 
 | Sheet | Contents |
 |---|---|
-| `Overview` | KPI summary, top resource types, Advisor by WAF pillar |
+| `Overview` | KPI summary, top resource types, Advisor by WAF pillar, **Resource Origin** (Azure-native / Hybrid-Arc / Migrate), and **Data Collection Notes** |
+| `Index` | Navigation sheet (positioned after `Overview`) with a hyperlink to every tab; each sheet has a **↩ Index** back-link |
 | `Subscriptions` | Resource aggregation by subscription, resource group, location, and resource type |
-| `AllResources` | Flat table across all types with common Azure Resource Graph / ARM columns and raw properties |
+| `AllResources` | Flat table across all types with common Azure Resource Graph / ARM columns, a **Category** column (Azure-native / Hybrid-Arc / Migrate), and raw properties |
 | `[ResourceType]` | One sheet per resource type using configured display names and declarative property enrichment |
 | `AdvisorFindings` | All Advisor recommendations with WAF pillar |
 | `PolicyCompliance` | Non-compliant resources |
@@ -286,6 +280,8 @@ Three files are generated per run:
 | `DefenderCoverageGap` | Unprotected billable units and **monthly cost to protect** per plan (omitted if `--skip-defender`) |
 | `Costs` | Cost by resource group/service (omitted if `--skip-costs`) |
 
+> **Sheet naming:** per-type sheet names come from configured display names; a short namespace prefix is added **only** when two providers would otherwise collide (e.g., `Cmp-Virtualmachinetemplates` vs `VMw-Virtualmachinetemplates`). Every resource type gets its own sheet up to Excel's hard cap of 255; the rest stay in `AllResources`. A scope-aware warning is logged when the type-sheet count is high (subscription ≥ 40, management group ≥ 60, tenant ≥ 75; env-overridable).
+
 ### `*_Executive.html` — Executive Report
 
 Self-contained HTML file. Open in any modern browser — **no internet required**.
@@ -294,26 +290,29 @@ Self-contained HTML file. Open in any modern browser — **no internet required*
 - KPI tiles (resources, subscriptions, critical findings, deprecated, tag coverage)
 - Advisor recommendations by WAF pillar (donut chart)
 - Top resource types (bar chart)
-- Top 5 priority findings
+- Top priority findings (5, or up to 10 for large environments)
 - Defender plan posture summary and **coverage gap** (unprotected billable units + estimated monthly cost to protect) *(if Defender data is available)*
-- Strategic recommendations (linked to findings)
+- Strategic recommendations as **priority-colored cards**
+- **Zero Trust** posture summary (color-coded by principle, with descriptions)
 - Modernization signals *(labeled as INFERRED)*
+- Collapsible sections with **Expand All / Collapse All** controls; subtle link to **Data Collection Notes**
 
 ### `*_Technical.html` — Technical Report
 
 Self-contained HTML file with sidebar navigation.
 
-- Resource inventory summary
-- WAF pillar findings (tabbed by pillar)
+- Resource inventory summary; **Resources by Subscription** chart labeled by subscription name
+- WAF pillar findings (tabbed by pillar) with **progressive loading** (30 rows at a time; large lists point to the Excel export) and **column search**
 - Policy compliance violations
 - Known misconfigurations (linked to official documentation)
 - Defender for Cloud assessments *(omitted if `--skip-defender`)*
-- Defender **plan posture** (enabled/disabled plans per subscription) and per-resource servers coverage *(if Defender data is available)*
+- Defender **plan posture** (enabled/disabled plans per subscription, with **column search**) and per-resource servers coverage *(if Defender data is available)*
 - Defender **coverage gap & cost to protect** table (unprotected billable units × unit price per plan) *(if Defender data is available)*
 - Resource health events
 - Deprecated/retiring resources with migration links
 - Landing Zone observations *(labeled as INFERRED)*
 - Azure Arc resources *(if present)*
+- Collapsible sections with **Expand All / Collapse All**; subtle link to **Data Collection Notes**
 
 > **Note on Charts:** Reports use [Chart.js](https://www.chartjs.org/) loaded from CDN (`cdn.jsdelivr.net`). An internet connection is required to display charts. All data tables are visible without internet.
 
@@ -430,6 +429,22 @@ For large tenants, consider using `--skip-advisor`, `--skip-policy`, or `--no-ht
 - **Charts require internet:** Chart.js is loaded from CDN. All data tables display without internet.
 - **Point-in-time only:** ATI produces snapshots. Trend analysis requires scheduling regular runs.
 - **Modernization signals are INFERRED:** No official Azure API returns an AI-readiness or modernization score. ATI infers these from detected resource types only.
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `Authentication failed` / no subscriptions found | Not logged in, or wrong tenant | Run `az login` (or `az login --tenant <ID>`); confirm with `az account show` |
+| `AuthorizationFailed` / `403` in the log for some data | Missing RBAC on a subscription | Ensure at least `Reader`; add `Security Reader` (Defender) / `Cost Management Reader` (costs), or use `--skip-defender` / `--skip-costs` |
+| Scan is slow or logs `429 TooManyRequests` | Resource Graph throttling | Increase `--throttle-delay` (e.g. `2.0`); narrow the scope with `--subscription-id` or `--management-group` |
+| Runs for a long time | Default scope is **all** subscriptions in the tenant | Scope the scan, or pass `-y` to skip the confirmation |
+| Hangs on the "Custom Report Name" prompt in CI | No interactive terminal (TTY) | Pass `--report-name <NAME>` or `-y` (both skip the prompt) |
+| Charts don't render | Offline / CDN blocked | Data tables still work offline; charts need `cdn.jsdelivr.net` |
+| Very verbose HTTP logs | `--debug` enabled | Omit `--debug`; the Azure SDK redacts tokens as `REDACTED` |
+
+> **Service Principal auth** reads `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` from the **environment**. Export them (or simply use `az login`) — a `.env` file is not auto-loaded.
 
 ---
 

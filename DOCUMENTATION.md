@@ -16,6 +16,7 @@
 - [Item 5: Excel Overview Sheet Styling](#item-5-excel-overview-sheet-styling)
 - [Item 6: CAF Landing Zone Observations](#item-6-caf-landing-zone-observations)
 - [Item 7: Defender Posture, Coverage Gap & Live Pricing](#item-7-defender-for-cloud--posture-coverage-gap--live-pricing)
+- [Item 8: Excel Navigation & Report UX Enhancements](#item-8-excel-navigation--report-ux-enhancements)
 - [Data Sources & References](#data-sources--references)
 
 ---
@@ -503,6 +504,32 @@ Adds three Defender for Cloud capabilities on top of the existing assessments co
 
 ---
 
+## Item 8: Excel Navigation & Report UX Enhancements
+
+### What It Does
+Adds navigation, classification, and transparency features across the Excel workbook and both HTML reports.
+
+**Excel (`writers/excel_writer.py`):**
+- **Index sheet** — positioned right after `Overview`, lists every worksheet with a hyperlink; each sheet carries a **↩ Index** back-link.
+- **Collision-free sheet naming** — a single, shared `resource_type → sheet name` map. A short namespace token is prefixed **only** when two providers would otherwise produce the same name (e.g., `Cmp-Virtualmachinetemplates` vs `VMw-Virtualmachinetemplates`).
+- **All types up to the Excel limit** — every resource type gets its own sheet up to Excel's hard cap of 255; the remainder stay in `AllResources`. A **scope-aware warning** is logged when the type-sheet count is high (subscription ≥ 40, management group ≥ 60, tenant ≥ 75; env-overridable), plus a hard warning at 200.
+- **Category classification** — `AllResources` gains a **Category** column (Azure-native / Hybrid-Arc / Migrate) and `Overview` gains a **Resource Origin** summary.
+- **Data Collection Notes** — the Overview footer mirrors the HTML "Data Collection Notes" (collector warnings / skipped sources).
+
+**Executive HTML (`writers/html_executive.py`):**
+- Collapsible sections with **Expand All / Collapse All** and per-section toggles.
+- Strategic recommendations rendered as **priority-colored cards**.
+- **Zero Trust** posture summary as color-coded cards with per-principle descriptions.
+- Subtle header link to the **Data Collection Notes** at the end.
+
+**Technical HTML (`writers/html_technical.py`):**
+- **Resources by Subscription** chart labeled by subscription **name** (not GUID).
+- WAF findings tables use **progressive loading** (30 rows at a time, up to 300 per pillar; the full list is in the Excel export). Column filters remain search-all across loaded rows.
+- **Column search** on the **Defender Plans by Subscription** table.
+- Subtle header link to the **Data Collection Notes**.
+
+---
+
 ## Data Sources & References
 
 ### Primary Azure APIs
@@ -540,7 +567,6 @@ Adds three Defender for Cloud capabilities on top of the existing assessments co
 
 ### External References
 
-- **Azure Resource Inventory (ARI)**: [GitHub](https://github.com/microsoft/ARI) — Complementary PowerShell tool
 - **Azure Updates**: [Official](https://azure.microsoft.com/en-us/updates/) — Retirement announcements
 - **Microsoft Learn**: [Training](https://learn.microsoft.com/) — Best practices, architecture patterns
 - **Chart.js**: [Documentation](https://www.chartjs.org/) — Visualization library (v4.4.0)

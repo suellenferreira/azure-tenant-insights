@@ -1,6 +1,6 @@
 # Azure Tenant Insights (ATI)
 
-> **Um scanner dinâmico e escalável de tenant Azure que gera inventários Excel estruturados e relatórios HTML duplos (Executivo + Técnico) alinhados com o Azure Well-Architected Framework.**
+> **Um scanner dinâmico e escalável de tenant Azure que gera inventários Excel estruturados, relatórios HTML duplos (Executivo + Técnico) e diagramas de arquitetura multi-página (draw.io) alinhados com o Azure Well-Architected Framework.**
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
 [![Azure Resource Graph](https://img.shields.io/badge/Azure-Resource%20Graph-0078D4)](https://learn.microsoft.com/pt-br/azure/governance/resource-graph/)
@@ -37,7 +37,7 @@ O Azure Tenant Insights (ATI) realiza o scan de um tenant Azure (assinaturas ún
 | `*_Inventory.xlsx` | Todas as equipes | Inventário Excel estruturado e multi-abas, organizado por tipo de recurso |
 | `*_Executive.html` | C-Level / Stakeholders | Pontuação de risco, KPIs, recomendações estratégicas, sinais de modernização |
 | `*_Technical.html` | Engenheiros / Arquitetos | Findings por pilar WAF, violações de policy, misconfigs, saúde, recursos deprecados |
-| `*.drawio` | Arquitetos | Diagrama de arquitetura multi-página (Overview, Service Model, Business Pillar, Recursos por assinatura) com ícones Azure reais — abra no [draw.io](https://app.diagrams.net) |
+| `*.drawio` | Arquitetos | Diagrama de arquitetura multi-página — Overview, Organization, Service Model, Business Pillar, Network Topology, Network Detail, Security Posture e Recursos por assinatura — com ícones Azure reais; abra no [draw.io](https://app.diagrams.net) |
 
 Todos os dados são obtidos **exclusivamente de APIs oficiais do Azure** — Azure Resource Graph, Azure Advisor, Azure Policy Insights, Resource Health e, opcionalmente, Defender for Cloud e Cost Management.
 
@@ -75,7 +75,7 @@ winget install -e --id Microsoft.AzureCLI
 # macOS
 brew install azure-cli
 
-# Azure Cloud Shell — pré-instalado, nenhuma ação necessária
+# Azure Cloud Shell — az CLI já instalado e autenticado
 ```
 
 ---
@@ -168,7 +168,7 @@ python invoke_ati.py --tenant-id <TENANT-ID> --debug
 ### Azure Cloud Shell
 
 ```bash
-# Não requer instalação — Python e az estão pré-instalados
+# Python e az já vêm prontos (az já autenticado) — só instale as dependências Python:
 git clone https://github.com/suellenferreira/azure-tenant-insights.git
 cd azure-tenant-insights
 pip install -r requirements.txt --quiet
@@ -306,6 +306,20 @@ Arquivo HTML autocontido com navegação lateral.
 - Recursos Azure Arc *(se presentes)*
 - Seções recolhíveis com **Expandir Tudo / Recolher Tudo**; link sutil para **Data Collection Notes**
 
+### `*_Diagram.drawio` — Diagrama de Arquitetura
+
+Arquivo [draw.io](https://app.diagrams.net) multi-página (XML não comprimido) com ícones Azure reais. Abra no app web/desktop do draw.io ou na extensão do VS Code. Páginas:
+
+- **Overview** — KPIs por Service Model e Business Pillar, com links clicáveis para todas as páginas
+- **Organization** — árvore Tenant → Management Groups → Subscriptions com contagem de recursos por assinatura
+- **Service Model** / **Business Pillar** — tipos de recurso agrupados por IaaS/PaaS/SaaS/… e por pilar de negócio
+- **Network Topology** — VNets, subnets e peering (verde = Connected, vermelho tracejado = Disconnected/órfão), agrupados por assinatura
+- **Network Detail** — recursos dentro das suas subnets (VMs, private endpoints, firewall, gateways, escudo NSG, nó On-Premises)
+- **Security Posture** — cards de risco por assinatura (cobertura Defender, Zero Trust) e badges de severidade nos recursos da Network Detail *(quando há dados de segurança)*
+- **Resources** — uma página por assinatura com containers de resource group
+
+Os ícones vêm dos stencils Azure 2019 do draw.io, com fallback genérico para novos tipos de recurso. Pule a geração com `--no-diagram`; use `--network-detail-per-subscription` para uma página de Network Detail por assinatura e `--no-security-overlay` para desativar os badges/página de segurança.
+
 ---
 
 ## Estrutura do Projeto
@@ -323,8 +337,12 @@ azure-tenant-insights/
 │
 ├── config/
 │   ├── resource_enrichment.yaml    ← Regras de promoção de propriedades por tipo
+│   ├── resource_classification.yaml ← Taxonomia 3 níveis (Service Model / Business Pillar)
 │   ├── deprecated_types.json       ← Anúncios oficiais de aposentadoria Azure
-│   └── misconfiguration_rules.yaml ← Definições de regras de segurança/configuração
+│   ├── misconfiguration_rules.yaml ← Definições de regras de segurança/configuração
+│   ├── drawio_stencils.yaml        ← Tipo de recurso → ícone Azure (diagrama)
+│   ├── network_placement.yaml      ← Recurso → resolução de subnet (Network Detail)
+│   └── security_overlay.yaml       ← Cores de severidade + Zero Trust (diagrama)
 │
 ├── collectors/                     ← Coleta de dados das APIs Azure
 │   ├── auth.py                     ← Autenticação
@@ -337,19 +355,26 @@ azure-tenant-insights/
 │   ├── defender.py                 ← Avaliações do Defender for Cloud
 │   ├── defender_posture.py         ← Postura de planos Defender (Microsoft.Security/pricings)
 │   ├── defender_pricing.py         ← Gap de cobertura + preços ao vivo (Azure Retail Prices API)
-│   └── costs.py                    ← Dados do Cost Management
+│   ├── costs.py                    ← Dados do Cost Management
+│   └── mgmt_groups.py              ← Hierarquia de Management Groups (diagrama Organization)
 │
 ├── processors/                     ← Enriquecimento e análise de dados
 │   ├── normalizer.py               ← Utilitários de normalização
 │   ├── deprecation.py              ← Detecção de recursos deprecados
 │   ├── waf_mapper.py               ← Agrupamento por pilar WAF
 │   ├── misconfig_detector.py       ← Avaliação de regras de misconfigurações
+│   ├── classifier.py               ← Taxonomia de classificação de recursos
+│   ├── org_tree.py                 ← Árvore Tenant → MG → Assinatura (diagrama)
+│   ├── network_topology.py         ← Grafo VNet/subnet/peering (diagrama)
+│   ├── network_detail.py           ← Recursos dentro das subnets (diagrama)
+│   ├── security_overlay.py         ← Risco por recurso/assinatura (diagrama)
 │   └── summary.py                  ← Cálculo de métricas de KPI
 │
 └── writers/                        ← Geração de saída
     ├── excel_writer.py             ← Construtor do workbook Excel
     ├── html_executive.py           ← Relatório HTML Executivo
-    └── html_technical.py           ← Relatório HTML Técnico
+    ├── html_technical.py           ← Relatório HTML Técnico
+    └── drawio_writer.py            ← Diagrama de arquitetura multi-página (draw.io)
 ```
 
 ---

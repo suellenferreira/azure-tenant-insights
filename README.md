@@ -1,6 +1,6 @@
 # Azure Tenant Insights (ATI)
 
-> **A dynamic, scalable Azure tenant scanner that generates structured Excel inventories and dual HTML reports (Executive + Technical) aligned with the Azure Well-Architected Framework.**
+> **A dynamic, scalable Azure tenant scanner that generates structured Excel inventories, dual HTML reports (Executive + Technical), and multi-page architecture diagrams (draw.io) aligned with the Azure Well-Architected Framework.**
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
 [![Azure Resource Graph](https://img.shields.io/badge/Azure-Resource%20Graph-0078D4)](https://learn.microsoft.com/en-us/azure/governance/resource-graph/)
@@ -37,7 +37,7 @@ Azure Tenant Insights (ATI) scans an Azure tenant (single or multiple subscripti
 | `*_Inventory.xlsx` | All teams | Structured, multi-sheet Excel inventory organized by resource type |
 | `*_Executive.html` | C-Level / Stakeholders | Risk score, KPIs, strategic recommendations, modernization signals |
 | `*_Technical.html` | Engineers / Architects | WAF pillar findings, policy violations, misconfigs, health, deprecated resources |
-| `*.drawio` | Architects | Multi-page architecture diagram (Overview, Service Model, Business Pillar, per-subscription Resources) with real Azure icons — open in [draw.io](https://app.diagrams.net) |
+| `*.drawio` | Architects | Multi-page architecture diagram — Overview, Organization, Service Model, Business Pillar, Network Topology, Network Detail, Security Posture, and per-subscription Resources — with real Azure icons; open in [draw.io](https://app.diagrams.net) |
 
 All data is sourced **exclusively from official Azure APIs** — Azure Resource Graph, Azure Advisor, Azure Policy Insights, Resource Health, and optionally Defender for Cloud and Cost Management.
 
@@ -75,7 +75,7 @@ winget install -e --id Microsoft.AzureCLI
 # macOS
 brew install azure-cli
 
-# Azure Cloud Shell — pre-installed, no action needed
+# Azure Cloud Shell — az CLI already installed and signed in
 ```
 
 ---
@@ -179,7 +179,7 @@ python invoke_ati.py --tenant-id <TENANT-ID> --debug
 ### Azure Cloud Shell
 
 ```bash
-# No installation needed — Python and az are pre-installed
+# Python & az are pre-installed and az is already signed in — just install the Python deps:
 git clone https://github.com/suellenferreira/azure-tenant-insights.git
 cd azure-tenant-insights
 pip install -r requirements.txt --quiet
@@ -323,6 +323,20 @@ Self-contained HTML file with sidebar navigation.
 
 > **Note on Charts:** Reports use [Chart.js](https://www.chartjs.org/) loaded from CDN (`cdn.jsdelivr.net`). An internet connection is required to display charts. All data tables are visible without internet.
 
+### `*_Diagram.drawio` — Architecture Diagram
+
+A multi-page [draw.io](https://app.diagrams.net) file (uncompressed XML) with real Azure icons. Open it in the draw.io web/desktop app or the VS Code draw.io extension. Pages:
+
+- **Overview** — KPIs by Service Model and Business Pillar, with clickable links to every page
+- **Organization** — Tenant → Management Groups → Subscriptions tree with per-subscription resource counts
+- **Service Model** / **Business Pillar** — resource types grouped by IaaS/PaaS/SaaS/… and by business pillar
+- **Network Topology** — VNets, subnets and peering (green = Connected, red dashed = Disconnected/orphan), grouped by subscription
+- **Network Detail** — resources placed inside their subnets (VMs, private endpoints, firewall, gateways, NSG shield, On-Premises node)
+- **Security Posture** — per-subscription risk cards (Defender coverage, Zero Trust) plus severity badges on Network Detail resources *(when security data is available)*
+- **Resources** — one page per subscription with resource-group containers
+
+Icons come from draw.io's bundled Azure 2019 stencils, with a generic fallback so brand-new resource types are still iconified. Skip generation with `--no-diagram`; use `--network-detail-per-subscription` for one Network Detail page per subscription and `--no-security-overlay` to disable the security badges/page.
+
 ---
 
 ## Project Structure
@@ -340,8 +354,12 @@ azure-tenant-insights/
 │
 ├── config/
 │   ├── resource_enrichment.yaml    ← Per-type property promotion rules
+│   ├── resource_classification.yaml ← 3-tier taxonomy (Service Model / Business Pillar)
 │   ├── deprecated_types.json       ← Known Azure retirement announcements
-│   └── misconfiguration_rules.yaml ← Security/config rule definitions
+│   ├── misconfiguration_rules.yaml ← Security/config rule definitions
+│   ├── drawio_stencils.yaml        ← Resource type → Azure icon mapping (diagram)
+│   ├── network_placement.yaml      ← Resource → subnet resolution (Network Detail)
+│   └── security_overlay.yaml       ← Severity colors + Zero Trust mapping (diagram)
 │
 ├── collectors/                     ← Azure API data collection
 │   ├── auth.py                     ← Authentication (DefaultAzureCredential / SP)
@@ -354,19 +372,26 @@ azure-tenant-insights/
 │   ├── defender.py                 ← Defender for Cloud assessments
 │   ├── defender_posture.py         ← Defender plan posture (Microsoft.Security/pricings)
 │   ├── defender_pricing.py         ← Coverage gap + live pricing (Azure Retail Prices API)
-│   └── costs.py                    ← Cost Management data
+│   ├── costs.py                    ← Cost Management data
+│   └── mgmt_groups.py              ← Management Group hierarchy (Organization diagram)
 │
 ├── processors/                     ← Data enrichment & analysis
 │   ├── normalizer.py               ← String/type normalization utilities
 │   ├── deprecation.py              ← Deprecated resource detection
 │   ├── waf_mapper.py               ← WAF pillar grouping
 │   ├── misconfig_detector.py       ← Misconfiguration rule evaluation
+│   ├── classifier.py               ← Resource classification taxonomy
+│   ├── org_tree.py                 ← Tenant → MG → Subscription tree (diagram)
+│   ├── network_topology.py         ← VNet/subnet/peering graph (diagram)
+│   ├── network_detail.py           ← Resource-in-subnet placement (diagram)
+│   ├── security_overlay.py         ← Per-resource/subscription risk (diagram)
 │   └── summary.py                  ← KPI metric computation
 │
 └── writers/                        ← Output generation
     ├── excel_writer.py             ← Excel workbook builder (openpyxl)
     ├── html_executive.py           ← Executive HTML report
-    └── html_technical.py           ← Technical HTML report
+    ├── html_technical.py           ← Technical HTML report
+    └── drawio_writer.py            ← Multi-page draw.io architecture diagram
 ```
 
 ---

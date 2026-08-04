@@ -1,7 +1,7 @@
 # Azure Tenant Insights — Enhanced Features Documentation
 
-> **Version 2.0** — Items 0-6 Implementation  
-> Last Updated: June 16, 2026  
+> **Version 3.0** — Items 0-10 Implementation  
+> Last Updated: August 4, 2026  
 > This document complements README.md with detailed methodologies and data sources.
 
 ---
@@ -18,6 +18,7 @@
 - [Item 7: Defender Posture, Coverage Gap & Live Pricing](#item-7-defender-for-cloud--posture-coverage-gap--live-pricing)
 - [Item 8: Excel Navigation & Report UX Enhancements](#item-8-excel-navigation--report-ux-enhancements)
 - [Item 9: Resource Classification Taxonomy](#item-9-resource-classification-taxonomy)
+- [Item 10: Architecture Diagrams (draw.io)](#item-10-architecture-diagrams-drawio)
 - [Data Sources & References](#data-sources--references)
 
 ---
@@ -549,7 +550,41 @@ Classifies every resource type into a 3-tier assessment taxonomy plus a Publishe
 - **`AllResources`**: new `Business Pillar` and `Service Model` columns.
 - **`Overview`**: a `SERVICE MODEL` summary block alongside `RESOURCE ORIGIN`.
 
-The taxonomy is fully editable and also feeds the planned draw.io **Service-Model** / **Business-Pillar** diagram pages.
+The taxonomy is fully editable and also feeds the draw.io **Service Model** and **Business Pillar** diagram pages (see Item 10).
+
+---
+
+## Item 10: Architecture Diagrams (draw.io)
+
+### What It Does
+Generates a multi-page draw.io (`.drawio`) architecture diagram with real Azure icons, alongside the Excel and HTML outputs. Everything is derived from data already collected via Azure Resource Graph — no extra Azure calls.
+
+### Pages
+- **Overview** — KPIs by Service Model and Business Pillar, with clickable links to every page.
+- **Organization** — Tenant → Management Groups → Subscriptions tree with per-subscription resource counts (`collectors/mgmt_groups.py`, `processors/org_tree.py`). Reconstructed from each subscription's `managementGroupAncestorsChain`; degrades to a flat Tenant → Subscriptions view.
+- **Service Model** / **Business Pillar** — resource types grouped by the classification taxonomy (Item 9).
+- **Network Topology** — VNets, subnets and peering, grouped by subscription; peering edges colored green (Connected) / red dashed (Disconnected/orphan) with a Broken Peering marker (`processors/network_topology.py`).
+- **Network Detail** — resources placed inside their subnets (VMs via NIC join, private endpoints, firewall, gateways, load balancers, bastion, SQL MI), NSG shield, loose-NIC aggregation, and an On-Premises node (`processors/network_detail.py`, `config/network_placement.yaml`).
+- **Security Posture** — per-subscription risk cards (Defender coverage, Zero Trust) plus severity badges on Network Detail resources (`processors/security_overlay.py`, `config/security_overlay.yaml`).
+- **Resources** — one page per subscription with resource-group containers.
+
+### How It Works
+`writers/drawio_writer.py` emits uncompressed `<mxfile>` XML with multiple pages. Icons come from draw.io's bundled Azure 2019 stencils (`config/drawio_stencils.yaml`) with a generic fallback so brand-new resource types stay iconified. Gridlines are disabled for a clean canvas on open.
+
+### Flags
+| Flag | Effect |
+|---|---|
+| `--no-diagram` | Skip diagram generation entirely |
+| `--skip-org` | Skip Management Group collection (Organization degrades to flat) |
+| `--network-detail-per-subscription` | One Network Detail page per subscription (large tenants) |
+| `--no-security-overlay` | Disable the Security Posture badges + page |
+
+### Config
+- `config/drawio_stencils.yaml` — resource type → Azure icon mapping (+ generic fallback)
+- `config/network_placement.yaml` — resource → subnet resolution paths (Network Detail)
+- `config/security_overlay.yaml` — severity colors and Zero Trust rule mapping
+
+Open the `.drawio` file in the draw.io web/desktop app or the VS Code draw.io extension.
 
 ---
 
@@ -626,6 +661,7 @@ Before deploying in production, validate:
 - [ ] **HTML Charts**: Open in browser, verify Chart.js loads (requires internet for CDN)
 - [ ] **Metadata**: Verify tenant name and subscriptions display correctly
 - [ ] **Flag Behavior**: Test `--skip-defender` and `--skip-costs` flags
+- [ ] **Diagram**: Open the `*_Diagram.drawio` in draw.io; verify Overview, Organization, Network Topology/Detail, and Security Posture pages
 
 ---
 
@@ -645,6 +681,6 @@ Before deploying in production, validate:
 
 ---
 
-**Document Version**: 2.0  
-**Last Updated**: June 16, 2026  
-**Status**: ✅ Complete — All Items 0-6 implemented and documented
+**Document Version**: 3.0  
+**Last Updated**: August 4, 2026  
+**Status**: ✅ Complete — Items 0-10 implemented and documented (including draw.io architecture diagrams)

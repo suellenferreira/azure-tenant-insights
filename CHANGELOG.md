@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Resource Classification Taxonomy (Phase C)**
+- Config-driven 3-tier taxonomy (`config/resource_classification.yaml`) + `processors/classifier.py`: Technical Category, Business Pillar, Service Model (IaaS/PaaS/SaaS/Hybrid/Supporting Services/Other), and Publisher (Microsoft/Third-party). Matching precedence: exact type → provider namespace → third-party/default.
+- New Excel **`Classification`** sheet (right after `Index`) with summary pivots (by Service Model and by Business Pillar) and a per-type detail table.
+- `AllResources` gains **Business Pillar** and **Service Model** columns; `Overview` gains a **Service Model** summary block.
+
 **Excel Navigation, Category & Report UX (Phase C)**
 - Excel: new **`Index`** navigation sheet (after `Overview`) with a hyperlink to every tab, plus a **↩ Index** back-link on each sheet.
 - Excel: collision-free, namespace-aware per-type sheet names — a short provider prefix is added only when two providers would otherwise produce the same name (e.g. `Cmp-Virtualmachinetemplates` vs `VMw-Virtualmachinetemplates`).

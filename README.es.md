@@ -250,10 +250,11 @@ Los informes generados pueden incluir metadatos del tenant, IDs de suscripción,
 
 | Hoja | Contenido |
 |---|---|
-| `Overview` | Resumen de KPIs, principales tipos de recurso, Advisor por pilar WAF, **Resource Origin** (Azure nativo / Híbrido-Arc / Migrate) y **Data Collection Notes** |
+| `Overview` | Resumen de KPIs, principales tipos de recurso, Advisor por pilar WAF, **Resource Origin** (Azure nativo / Híbrido-Arc / Migrate), un resumen de **Service Model** (IaaS/PaaS/SaaS/Hybrid/Supporting) y **Data Collection Notes** |
 | `Index` | Hoja de navegación (después de `Overview`) con un hipervínculo a cada pestaña; cada hoja tiene un enlace **↩ Index** de retorno |
+| `Classification` | **Taxonomía** de recursos por tipo — Categoría Técnica, Pilar de Negocio, Service Model, Publisher (Microsoft/Third-party) — con pivotes de resumen (config-driven) |
 | `Subscriptions` | Una fila por suscripción con conteo de recursos |
-| `AllResources` | Tabla plana de TODOS los recursos en todos los tipos, con una columna **Category** (Azure nativo / Híbrido-Arc / Migrate) |
+| `AllResources` | Tabla plana de TODOS los recursos en todos los tipos, con una columna **Category** (Azure nativo / Híbrido-Arc / Migrate), columnas **Business Pillar** y **Service Model** |
 | `[TipoRecurso]` | Una hoja por tipo de recurso (ej.: `VirtualMachines`) |
 | `AdvisorFindings` | Todas las recomendaciones del Advisor con pilar WAF |
 | `PolicyCompliance` | Recursos no conformes con policies |

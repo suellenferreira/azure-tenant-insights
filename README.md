@@ -263,10 +263,11 @@ Three files are generated per run:
 
 | Sheet | Contents |
 |---|---|
-| `Overview` | KPI summary, top resource types, Advisor by WAF pillar, **Resource Origin** (Azure-native / Hybrid-Arc / Migrate), and **Data Collection Notes** |
+| `Overview` | KPI summary, top resource types, Advisor by WAF pillar, **Resource Origin** (Azure-native / Hybrid-Arc / Migrate), a **Service Model** summary (IaaS/PaaS/SaaS/Hybrid/Supporting), and **Data Collection Notes** |
 | `Index` | Navigation sheet (positioned after `Overview`) with a hyperlink to every tab; each sheet has a **↩ Index** back-link |
+| `Classification` | Resource **taxonomy** per type — Technical Category, Business Pillar, Service Model, Publisher (Microsoft/Third-party) — with summary pivots (config-driven) |
 | `Subscriptions` | Resource aggregation by subscription, resource group, location, and resource type |
-| `AllResources` | Flat table across all types with common Azure Resource Graph / ARM columns, a **Category** column (Azure-native / Hybrid-Arc / Migrate), and raw properties |
+| `AllResources` | Flat table across all types with common Azure Resource Graph / ARM columns, a **Category** column (Azure-native / Hybrid-Arc / Migrate), **Business Pillar** and **Service Model** columns, and raw properties |
 | `[ResourceType]` | One sheet per resource type using configured display names and declarative property enrichment |
 | `AdvisorFindings` | All Advisor recommendations with WAF pillar |
 | `PolicyCompliance` | Non-compliant resources |

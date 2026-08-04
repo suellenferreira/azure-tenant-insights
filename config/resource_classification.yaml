@@ -1,0 +1,150 @@
+# Resource classification taxonomy (Assessment lens)
+# --------------------------------------------------
+# Three hierarchical tiers + a Publisher axis, used by the Excel "Classification"
+# sheet, the AllResources columns, the Overview summary, and (later) the draw.io
+# Service-Model / Business-Pillar diagram pages.
+#
+#   technical_category  — Tier 1: detailed workload category (~20 buckets)
+#   business_pillar     — Tier 2: business pillar (Compute, AI, Data Platform, ...)
+#   service_model       — Tier 3: IaaS | PaaS | SaaS | Hybrid | Supporting Services | Other
+#   publisher           — derived in code: Microsoft (namespace microsoft.*) vs Third-party
+#
+# Matching precedence (see processors/classifier.py):
+#   1. exact resource type (under `types:`)      e.g. microsoft.web/serverfarms
+#   2. provider namespace (under `namespaces:`)  e.g. microsoft.web
+#   3. non-microsoft.* namespace                 -> Third-party / Other
+#   4. no rule                                   -> Other
+#
+# All keys MUST be lowercase. This file is fully editable — add rules as needed.
+
+defaults:
+  technical_category: "Other"
+  business_pillar: "Other"
+  service_model: "Other"
+
+# Display order for the Service Model summary (Overview / Classification sheet)
+service_model_order:
+  - "IaaS"
+  - "PaaS"
+  - "SaaS"
+  - "Hybrid"
+  - "Supporting Services"
+  - "Other"
+
+# ── Provider-namespace rules (fallback) ──────────────────────────────────────
+namespaces:
+  # Compute
+  microsoft.compute: { technical_category: "Compute - Virtual Machines", business_pillar: "Compute", service_model: "IaaS" }
+  microsoft.classiccompute: { technical_category: "Compute - Virtual Machines", business_pillar: "Compute", service_model: "IaaS" }
+  microsoft.batch: { technical_category: "Compute - Virtual Machines", business_pillar: "Compute", service_model: "PaaS" }
+  microsoft.desktopvirtualization: { technical_category: "Compute - Platform Apps", business_pillar: "Compute", service_model: "PaaS" }
+  microsoft.web: { technical_category: "Compute - Platform Apps", business_pillar: "Compute", service_model: "PaaS" }
+  microsoft.containerservice: { technical_category: "Compute - Containers", business_pillar: "Compute", service_model: "PaaS" }
+  microsoft.app: { technical_category: "Compute - Containers", business_pillar: "Compute", service_model: "PaaS" }
+  microsoft.containerinstance: { technical_category: "Compute - Containers", business_pillar: "Compute", service_model: "PaaS" }
+  microsoft.containerregistry: { technical_category: "Compute - Containers", business_pillar: "Compute", service_model: "PaaS" }
+
+  # Networking
+  microsoft.network: { technical_category: "Networking", business_pillar: "Network", service_model: "IaaS" }
+  microsoft.classicnetwork: { technical_category: "Networking", business_pillar: "Network", service_model: "IaaS" }
+  microsoft.cdn: { technical_category: "Networking", business_pillar: "Network", service_model: "PaaS" }
+
+  # Storage
+  microsoft.storage: { technical_category: "Storage", business_pillar: "Storage", service_model: "PaaS" }
+  microsoft.classicstorage: { technical_category: "Storage", business_pillar: "Storage", service_model: "IaaS" }
+  microsoft.storagesync: { technical_category: "Storage", business_pillar: "Storage", service_model: "PaaS" }
+  microsoft.netapp: { technical_category: "Storage", business_pillar: "Storage", service_model: "PaaS" }
+
+  # Databases (relational / NoSQL / cache)
+  microsoft.sql: { technical_category: "Database - Relational", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.sqlvirtualmachine: { technical_category: "Database - Relational", business_pillar: "Data Platform", service_model: "IaaS" }
+  microsoft.dbforpostgresql: { technical_category: "Database - Relational", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.dbformysql: { technical_category: "Database - Relational", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.dbformariadb: { technical_category: "Database - Relational", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.documentdb: { technical_category: "Database - NoSQL", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.cache: { technical_category: "Cache", business_pillar: "Data Platform", service_model: "PaaS" }
+
+  # Analytics & data platform
+  microsoft.synapse: { technical_category: "Analytics & Data Platform", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.databricks: { technical_category: "Analytics & Data Platform", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.datafactory: { technical_category: "Analytics & Data Platform", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.kusto: { technical_category: "Analytics & Data Platform", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.hdinsight: { technical_category: "Analytics & Data Platform", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.streamanalytics: { technical_category: "Analytics & Data Platform", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.datalakestore: { technical_category: "Analytics & Data Platform", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.datalakeanalytics: { technical_category: "Analytics & Data Platform", business_pillar: "Data Platform", service_model: "PaaS" }
+  microsoft.fabric: { technical_category: "Analytics & Data Platform", business_pillar: "Data Platform", service_model: "SaaS" }
+  microsoft.powerbidedicated: { technical_category: "Analytics & Data Platform", business_pillar: "Data Platform", service_model: "SaaS" }
+
+  # AI & machine learning
+  microsoft.cognitiveservices: { technical_category: "AI & Machine Learning", business_pillar: "AI", service_model: "PaaS" }
+  microsoft.machinelearningservices: { technical_category: "AI & Machine Learning", business_pillar: "AI", service_model: "PaaS" }
+  microsoft.search: { technical_category: "AI & Machine Learning", business_pillar: "AI", service_model: "PaaS" }
+  microsoft.botservice: { technical_category: "AI & Machine Learning", business_pillar: "AI", service_model: "PaaS" }
+
+  # Integration & messaging
+  microsoft.servicebus: { technical_category: "Integration & Messaging", business_pillar: "Integration", service_model: "PaaS" }
+  microsoft.eventhub: { technical_category: "Integration & Messaging", business_pillar: "Integration", service_model: "PaaS" }
+  microsoft.eventgrid: { technical_category: "Integration & Messaging", business_pillar: "Integration", service_model: "PaaS" }
+  microsoft.logic: { technical_category: "Integration & Messaging", business_pillar: "Integration", service_model: "PaaS" }
+  microsoft.signalrservice: { technical_category: "Integration & Messaging", business_pillar: "Integration", service_model: "PaaS" }
+  microsoft.notificationhubs: { technical_category: "Integration & Messaging", business_pillar: "Integration", service_model: "PaaS" }
+  microsoft.appconfiguration: { technical_category: "Integration & Messaging", business_pillar: "Integration", service_model: "PaaS" }
+  microsoft.apimanagement: { technical_category: "API Management", business_pillar: "Integration", service_model: "PaaS" }
+
+  # Identity & security (transversal -> Supporting Services)
+  microsoft.managedidentity: { technical_category: "Identity & Access", business_pillar: "Security", service_model: "Supporting Services" }
+  microsoft.aadiam: { technical_category: "Identity & Access", business_pillar: "Security", service_model: "Supporting Services" }
+  microsoft.azureactivedirectory: { technical_category: "Identity & Access", business_pillar: "Security", service_model: "Supporting Services" }
+  microsoft.keyvault: { technical_category: "Security", business_pillar: "Security", service_model: "Supporting Services" }
+  microsoft.security: { technical_category: "Security", business_pillar: "Security", service_model: "Supporting Services" }
+  microsoft.securityinsights: { technical_category: "Security", business_pillar: "Security", service_model: "Supporting Services" }
+
+  # Monitoring & operations (transversal -> Supporting Services)
+  microsoft.operationalinsights: { technical_category: "Monitoring & Operations", business_pillar: "Operations", service_model: "Supporting Services" }
+  microsoft.insights: { technical_category: "Monitoring & Operations", business_pillar: "Operations", service_model: "Supporting Services" }
+  microsoft.alertsmanagement: { technical_category: "Monitoring & Operations", business_pillar: "Operations", service_model: "Supporting Services" }
+  microsoft.operationsmanagement: { technical_category: "Monitoring & Operations", business_pillar: "Operations", service_model: "Supporting Services" }
+  microsoft.automation: { technical_category: "DevOps & Automation", business_pillar: "Operations", service_model: "Supporting Services" }
+  microsoft.devtestlab: { technical_category: "DevOps & Automation", business_pillar: "Operations", service_model: "PaaS" }
+
+  # Backup & disaster recovery (transversal -> Supporting Services)
+  microsoft.recoveryservices: { technical_category: "Backup & DR", business_pillar: "Business Continuity", service_model: "Supporting Services" }
+  microsoft.dataprotection: { technical_category: "Backup & DR", business_pillar: "Business Continuity", service_model: "Supporting Services" }
+
+  # Governance (transversal -> Supporting Services)
+  microsoft.authorization: { technical_category: "Governance", business_pillar: "Governance", service_model: "Supporting Services" }
+  microsoft.policyinsights: { technical_category: "Governance", business_pillar: "Governance", service_model: "Supporting Services" }
+  microsoft.management: { technical_category: "Governance", business_pillar: "Governance", service_model: "Supporting Services" }
+  microsoft.blueprint: { technical_category: "Governance", business_pillar: "Governance", service_model: "Supporting Services" }
+  microsoft.costmanagement: { technical_category: "Governance", business_pillar: "Governance", service_model: "Supporting Services" }
+  microsoft.consumption: { technical_category: "Governance", business_pillar: "Governance", service_model: "Supporting Services" }
+  microsoft.purview: { technical_category: "Governance", business_pillar: "Governance", service_model: "Supporting Services" }
+
+  # Hybrid & multicloud
+  microsoft.hybridcompute: { technical_category: "Hybrid & Multicloud", business_pillar: "Hybrid", service_model: "Hybrid" }
+  microsoft.azurearcdata: { technical_category: "Hybrid & Multicloud", business_pillar: "Hybrid", service_model: "Hybrid" }
+  microsoft.connectedvmwarevsphere: { technical_category: "Hybrid & Multicloud", business_pillar: "Hybrid", service_model: "Hybrid" }
+  microsoft.avs: { technical_category: "Hybrid & Multicloud", business_pillar: "Hybrid", service_model: "Hybrid" }
+  microsoft.azurestackhci: { technical_category: "Hybrid & Multicloud", business_pillar: "Hybrid", service_model: "Hybrid" }
+  microsoft.scvmm: { technical_category: "Hybrid & Multicloud", business_pillar: "Hybrid", service_model: "Hybrid" }
+  microsoft.kubernetes: { technical_category: "Hybrid & Multicloud", business_pillar: "Hybrid", service_model: "Hybrid" }
+  microsoft.hybridcontainerservice: { technical_category: "Hybrid & Multicloud", business_pillar: "Hybrid", service_model: "Hybrid" }
+
+  # Migration
+  microsoft.migrate: { technical_category: "Migration", business_pillar: "Migration", service_model: "Other" }
+  microsoft.offazure: { technical_category: "Migration", business_pillar: "Migration", service_model: "Other" }
+  microsoft.datamigration: { technical_category: "Migration", business_pillar: "Migration", service_model: "Other" }
+
+  # IoT
+  microsoft.devices: { technical_category: "IoT", business_pillar: "Integration", service_model: "PaaS" }
+  microsoft.digitaltwins: { technical_category: "IoT", business_pillar: "Integration", service_model: "PaaS" }
+  microsoft.iotcentral: { technical_category: "IoT", business_pillar: "Integration", service_model: "SaaS" }
+
+# ── Exact resource-type overrides (highest priority) ─────────────────────────
+# Use only where the namespace default is wrong for a specific type.
+types:
+  # SQL VMs run inside a customer-managed VM -> IaaS, not PaaS
+  microsoft.sqlvirtualmachine/sqlvirtualmachines: { technical_category: "Database - Relational", business_pillar: "Data Platform", service_model: "IaaS" }
+  # Static Web Apps are a managed PaaS surface
+  microsoft.web/staticsites: { technical_category: "Compute - Platform Apps", business_pillar: "Compute", service_model: "PaaS" }

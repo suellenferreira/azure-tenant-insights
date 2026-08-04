@@ -598,6 +598,32 @@ def _write_overview_sheet(wb, scan_data: dict):
         )
         ws.row_dimensions[_r].height = 20
 
+    # Service Model pie chart (next to the table)
+    _sm_n = len(_sm_labels[:6])
+    if _sm_n:
+        from openpyxl.chart import PieChart, Reference as _SMRef
+        from openpyxl.chart.label import DataLabelList
+        from openpyxl.chart.series import DataPoint as _SMDP
+
+        _pie = PieChart()
+        _pie.title = "Service Model Distribution"
+        _pie.height = 6.0
+        _pie.width = 8.5
+        _pie.style = 10
+        _pdata = _SMRef(ws, min_col=5, min_row=16, max_row=15 + _sm_n)
+        _pcats = _SMRef(ws, min_col=4, min_row=16, max_row=15 + _sm_n)
+        _pie.add_data(_pdata, titles_from_data=False)
+        _pie.set_categories(_pcats)
+        _pie.dataLabels = DataLabelList()
+        _pie.dataLabels.showVal = True
+        _sm_pie_palette = ["1F4E79", "2E86AB", "548235", "BF8F00", "C55A11", "7F7F7F"]
+        _pser = _pie.series[0]
+        for _di in range(_sm_n):
+            _dp = _SMDP(idx=_di)
+            _dp.graphicalProperties.solidFill = _sm_pie_palette[_di % len(_sm_pie_palette)]
+            _pser.dPt.append(_dp)
+        ws.add_chart(_pie, "G15")
+
     # Section 2: Top Resource Types (with dark header)
     ws.merge_cells("D4:E4")
     ws["D4"].value = "TOP RESOURCE TYPES"
@@ -649,6 +675,59 @@ def _write_overview_sheet(wb, scan_data: dict):
 
     _col_widths(ws, [28, 18, 16, 32, 14, 4, 28, 14])
 
+    # Section 3b: Business Pillar summary (ALL pillars) + horizontal bar chart
+    _pil_counts: Dict[str, int] = {}
+    for _rt, _rows in scan_data.get("resources_by_type", {}).items():
+        _p = classify_resource_type(_rt)["business_pillar"]
+        _pil_counts[_p] = _pil_counts.get(_p, 0) + len(_rows)
+    _pil_sorted = sorted(_pil_counts.items(), key=lambda x: -x[1])
+    _pil_n = len(_pil_sorted)
+
+    _pil_header_row = 27
+    ws.merge_cells(f"A{_pil_header_row}:H{_pil_header_row}")
+    ws[f"A{_pil_header_row}"].value = "BUSINESS PILLAR \u2014 ALL"
+    ws[f"A{_pil_header_row}"].fill = section_header_fill
+    ws[f"A{_pil_header_row}"].font = section_header_font
+    ws[f"A{_pil_header_row}"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[_pil_header_row].height = 22
+
+    _pil_tbl_hdr = _pil_header_row + 1
+    ws.cell(row=_pil_tbl_hdr, column=1).value = "Pillar"
+    ws.cell(row=_pil_tbl_hdr, column=2).value = "Resources"
+    _header_style(ws, _pil_tbl_hdr, 2)
+    for _i, (_p, _c) in enumerate(_pil_sorted):
+        _r = _pil_tbl_hdr + 1 + _i
+        ws.cell(row=_r, column=1).value = _p
+        ws.cell(row=_r, column=1).fill = PatternFill("solid", fgColor="F5F5F5")
+        ws.cell(row=_r, column=1).font = Font(size=10)
+        _pvc = ws.cell(row=_r, column=2)
+        _pvc.value = _c
+        _pvc.fill = PatternFill("solid", fgColor="D6E4F0")
+        _pvc.font = Font(bold=True, size=10)
+        _pvc.alignment = Alignment(horizontal="center")
+
+    _pil_bar_h = max(6.0, _pil_n * 0.7)
+    if _pil_n:
+        from openpyxl.chart import BarChart as _PBC, Reference as _PRef
+        _pbar = _PBC()
+        _pbar.type = "bar"
+        _pbar.grouping = "clustered"
+        _pbar.title = "Resources by Business Pillar"
+        _pbar.height = _pil_bar_h
+        _pbar.width = 16
+        _pbar.style = 10
+        _pbd = _PRef(ws, min_col=2, min_row=_pil_tbl_hdr, max_row=_pil_tbl_hdr + _pil_n)
+        _pbc = _PRef(ws, min_col=1, min_row=_pil_tbl_hdr + 1, max_row=_pil_tbl_hdr + _pil_n)
+        _pbar.add_data(_pbd, titles_from_data=True)
+        _pbar.set_categories(_pbc)
+        _pbar.x_axis.delete = False
+        _pbar.x_axis.tickLblPos = "nextTo"
+        _pbar.legend = None
+        ws.add_chart(_pbar, f"D{_pil_tbl_hdr}")
+
+    _pil_bar_rows = int(_pil_bar_h / 0.5) + 2
+    _pil_band_end = _pil_tbl_hdr + max(_pil_n, _pil_bar_rows)
+
     # Section 4: Microsoft References (5 links)
     _REFERENCES = [
         ("Azure Well-Architected Framework overview",
@@ -662,7 +741,7 @@ def _write_overview_sheet(wb, scan_data: dict):
         ("Azure Policy documentation",
          "https://learn.microsoft.com/en-us/azure/governance/policy/overview"),
     ]
-    ref_start_row = 24
+    ref_start_row = _pil_band_end + 2
 
     ws.merge_cells(f"A{ref_start_row}:H{ref_start_row}")
     ref_header = ws[f"A{ref_start_row}"]

@@ -48,7 +48,7 @@ All data is sourced **exclusively from official Azure APIs** — Azure Resource 
 - **Dynamic resource-type coverage** — every resource type in the tenant is discovered and captured automatically. New Azure types are handled generically (no code change); per-type enrichment is optional and additive via `config/resource_enrichment.yaml`.
 - **Structured multi-sheet Excel** — one sheet per resource type with declarative property enrichment, a flat `AllResources` table, an **Index** navigation sheet (hyperlinks to every tab, with per-sheet back-links), a **Category** column (Azure-native / Hybrid-Arc / Migrate), and a **Data Collection Notes** section.
 - **Dual HTML reports** — an Executive report (risk score, KPIs, priority-colored recommendation cards, Zero Trust posture) and a Technical report (WAF pillar findings, policy, misconfigs, health, deprecated resources); both self-contained, with collapsible sections and offline-friendly tables.
-- **draw.io architecture diagram** — a multi-page `.drawio` with real Azure icons: Overview (KPIs + cross-page links), **Organization** (Tenant → Management Groups → Subscriptions tree with resource counts), Service Model, Business Pillar, **Network Topology** (VNets/subnets/peering with broken-peering detection), a **Network Detail** page (resources placed inside their subnets, ARI-style: VMs, private endpoints, firewall, gateways, NSG shield, On-Premises node), and one Resources page per subscription. Config-driven icon map with a generic fallback, so new Azure resource types are diagrammed automatically. Skip with `--no-diagram`.
+- **draw.io architecture diagram** — a multi-page `.drawio` with real Azure icons: Overview (KPIs + cross-page links), **Organization** (Tenant → Management Groups → Subscriptions tree with resource counts), Service Model, Business Pillar, **Network Topology** (VNets/subnets/peering with broken-peering detection), a **Network Detail** page (resources placed inside their subnets: VMs, private endpoints, firewall, gateways, NSG shield, On-Premises node), a **Security Posture** page (per-subscription risk cards + severity badges on resources), and one Resources page per subscription. Config-driven icon map with a generic fallback, so new Azure resource types are diagrammed automatically. Skip with `--no-diagram`.
 - **WAF pillar mapping** — Advisor recommendations organized by Well-Architected Framework pillar.
 - **Rules-based misconfiguration detection** — official-source rules mapped to Zero Trust principles.
 - **Policy compliance & deprecated-resource detection** — non-compliant resources and matches against official Azure retirement announcements.
@@ -231,6 +231,7 @@ All data sources are **enabled by default**. Use `--skip-*` flags to exclude the
 | `--no-diagram` | Skip draw.io architecture diagram generation |
 | `--network-detail-per-subscription` | Network Detail: one page per subscription (for very large tenants) |
 | `--skip-org` | Skip Management Group hierarchy collection (Organization diagram) |
+| `--no-security-overlay` | Disable the diagram Security Posture overlay (badges + page) |
 
 ### Performance
 

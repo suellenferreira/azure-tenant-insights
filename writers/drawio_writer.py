@@ -494,12 +494,12 @@ def _page_network(scan_data: dict) -> Optional[_Page]:
                 "strokeColor=#C00000;fontColor=#C00000;fontSize=11;align=left;spacingLeft=8;dashed=1;",
                 lx + PAD, PAGE_MARGIN + HEADER_H + 24, 320 - 2 * PAD, 20)
 
-    # ---- Connectivity-aware placement (item 5): keep peered VNets adjacent and
-    # route each peering edge through a lane *below* its row, so it never crosses
-    # an unrelated VNet. In-scope peerings define connected components; each
-    # component gets its own row (hub first, then BFS neighbours). Isolated VNets
-    # flow-pack afterwards. Orphan peerings link to external placeholders.
+    # ---- Subscription-grouped placement: each subscription gets a subtle
+    # bordered container (like Network Detail). Within a subscription, peered
+    # VNets are ordered adjacently; peering edges are lane-routed below the rows
+    # (absolute coords) so they never cross an unrelated VNet box.
     page_right = PAGE_MARGIN + 1620
+    inner_w = page_right - PAGE_MARGIN - 2 * PAD
     vnet_by_id = {v["id"]: v for v in vnets}
     id_set = set(vnet_by_id)
 
@@ -511,104 +511,89 @@ def _page_network(scan_data: dict) -> Optional[_Page]:
         adj[pe["src"]].add(pe["dst"])
         adj[pe["dst"]].add(pe["src"])
 
-    seen: set = set()
-    components: List[List[str]] = []
-    for i in sorted(vnet_by_id, key=lambda n: vnet_by_id[n]["name"]):
-        if i in seen or not adj[i]:
-            continue
-        stack, comp = [i], []
-        while stack:
-            x = stack.pop()
-            if x in seen:
-                continue
-            seen.add(x)
-            comp.append(x)
-            stack.extend(adj[x] - seen)
-        components.append(comp)
-    components.sort(key=len, reverse=True)
-
-    def _order_component(comp: List[str]) -> List[str]:
-        hub = max(sorted(comp), key=lambda n: len(adj[n]))
-        order, cseen, queue = [], set(), [hub]
-        while queue:
-            n = queue.pop(0)
-            if n in cseen:
-                continue
-            cseen.add(n)
-            order.append(n)
-            queue.extend(sorted(adj[n] - cseen, key=lambda m: -len(adj[m])))
-        return order
-
     def _vnet_dims(v: dict) -> Tuple[int, int]:
         k = max(len(v["subnets"]), 1)
         cols = min(GROUP_COLS, k)
         rows = (k + cols - 1) // cols
         return cols * NODE_W + 2 * PAD, 48 + rows * NODE_H + PAD
 
+    def _order_sub(vids: List[str]) -> List[str]:
+        """Connectivity-aware order within a subscription: peered VNets adjacent."""
+        vset = set(vids)
+
+        def deg(n: str) -> int:
+            return len(adj[n] & vset)
+
+        seen: set = set()
+        order: List[str] = []
+        for start in sorted(vids, key=lambda n: (-deg(n), vnet_by_id[n]["name"].lower())):
+            if start in seen:
+                continue
+            queue = [start]
+            while queue:
+                n = queue.pop(0)
+                if n in seen:
+                    continue
+                seen.add(n)
+                order.append(n)
+                nbrs = sorted((adj[n] & vset) - seen,
+                              key=lambda m: (-deg(m), vnet_by_id[m]["name"].lower()))
+                queue.extend(nbrs)
+        return order
+
+    subs_map: Dict[str, List[str]] = {}
+    for vid, v in vnet_by_id.items():
+        subs_map.setdefault(v.get("subscriptionId", ""), []).append(vid)
+    sub_names = {s.get("subscriptionId", ""): (s.get("displayName") or s.get("subscriptionId", ""))
+                 for s in scan_data.get("subscriptions", [])}
+
+    _sub_style = (
+        "rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#AAB2BD;dashed=1;"
+        "dashPattern=6 4;fontColor=#555555;fontSize=13;fontStyle=1;align=left;verticalAlign=top;"
+        "spacingLeft=36;spacingTop=8;arcSize=1;"
+    )
+    _SUB_HEADER = 40
+
     pos: Dict[str, str] = {}
     geom: Dict[str, Tuple[int, int, int, int]] = {}
-    comp_of: Dict[str, int] = {}
-    comp_lane_y: Dict[int, int] = {}
+    gy = PAGE_MARGIN + 140  # start below the legend
 
-    y = PAGE_MARGIN + 140  # start below the legend (fixes item 2 overlap)
+    for sid in sorted(subs_map, key=lambda s: sub_names.get(s, s).lower()):
+        vids = _order_sub(subs_map[sid])
+        dims = [_vnet_dims(vnet_by_id[v]) for v in vids]
+        ppos, iw, ih = _flow_pack(dims, inner_w, PAD * 2)
+        gw = max(iw + 2 * PAD, 340)
+        gh = _SUB_HEADER + ih + PAD
+        page.vertex(f"Subscription: {sub_names.get(sid, sid)}", _sub_style,
+                    PAGE_MARGIN, gy, gw, gh)
+        page.vertex("", _icon_style(_stencil("general/Subscriptions.svg")),
+                    PAGE_MARGIN + 8, gy + 8, 22, 22)
+        for v, (vx, vy), (w, h) in zip(vids, ppos, dims):
+            ax = PAGE_MARGIN + PAD + vx
+            ay = gy + _SUB_HEADER + vy
+            cont, _, _ = _layout_vnet(page, vnet_by_id[v], ax, ay)
+            pos[v] = cont
+            geom[v] = (ax, ay, w, h)
+        gy += gh + PAD * 3
 
-    for ci, comp in enumerate(components):
-        comp_set = set(comp)
-        x = PAGE_MARGIN
-        row_h = 0
-        for vid in _order_component(comp):
-            v = vnet_by_id[vid]
-            w, h = _vnet_dims(v)
-            cont, _, _ = _layout_vnet(page, v, x, y)
-            pos[vid] = cont
-            geom[vid] = (x, y, w, h)
-            comp_of[vid] = ci
-            x += w + PAD * 2
-            row_h = max(row_h, h)
-        row_bottom = y + row_h
-        n_edges = sum(1 for pe in in_scope
-                      if pe["src"] in comp_set and pe["dst"] in comp_set)
-        comp_lane_y[ci] = row_bottom + 24
-        y = row_bottom + 24 + max(1, n_edges) * 16 + PAD * 2
-
-    # Isolated VNets (no in-scope peering) flow-pack after the components.
-    x_cursor = PAGE_MARGIN
-    row_y = y
-    row_max_h = 0
-    for vid in sorted((i for i in vnet_by_id if i not in pos),
-                      key=lambda n: (vnet_by_id[n]["subscriptionId"], vnet_by_id[n]["name"])):
-        v = vnet_by_id[vid]
-        w, h = _vnet_dims(v)
-        if x_cursor + w > page_right and x_cursor > PAGE_MARGIN:
-            x_cursor = PAGE_MARGIN
-            row_y += row_max_h + PAD * 2
-            row_max_h = 0
-        cont, _, _ = _layout_vnet(page, v, x_cursor, row_y)
-        pos[vid] = cont
-        geom[vid] = (x_cursor, row_y, w, h)
-        x_cursor += w + PAD * 2
-        row_max_h = max(row_max_h, h)
-
-    # In-scope peering edges routed through their component's lane.
-    lane_used: Dict[int, int] = {}
+    # In-scope peering edges lane-routed below the boxes (absolute coords).
+    lane = 0
     for pe in in_scope:
-        ci = comp_of.get(pe["src"])
-        if ci is None or pe["src"] not in geom or pe["dst"] not in geom:
+        if pe["src"] not in geom or pe["dst"] not in geom:
             continue
-        x1, _, w1, _ = geom[pe["src"]]
-        x2, _, w2, _ = geom[pe["dst"]]
+        x1, y1, w1, h1 = geom[pe["src"]]
+        x2, y2, w2, h2 = geom[pe["dst"]]
         sx, dx = x1 + w1 // 2, x2 + w2 // 2
-        k = lane_used.get(ci, 0)
-        lane_used[ci] = k + 1
-        lane_y = comp_lane_y[ci] + k * 16
+        lane_y = max(y1 + h1, y2 + h2) + 20 + lane * 14
+        lane += 1
         style = _EDGE_BROKEN if pe["broken"] else _EDGE_OK
         page.edge(pos[pe["src"]], pos[pe["dst"]], style, label=pe["state"],
                   points=[(sx, lane_y), (dx, lane_y)])
 
-    # External (orphan) VNet placeholders + dashed edges beneath the topology.
+    # External (orphan) VNet placeholders + dashed edges beneath everything.
     ext_pos: Dict[str, str] = {}
     ext_x = PAGE_MARGIN
-    ext_y = row_y + row_max_h + PAD * 3
+    ext_y = gy + PAD
     for pe in orphans:
         if pe["src"] not in pos:
             continue
@@ -696,24 +681,59 @@ def _pages_resources(scan_data: dict) -> List[_Page]:
     return pages
 
 
-# ── Network Detail (Group B) — resources inside subnets, ARI-style ────────
+# ── Network Detail (Group B) — resources inside subnets ─────────────────
+_ACTIVE_OVERLAY: Optional[dict] = None
+
+
+def _sev_color(sev: Optional[str]) -> Optional[str]:
+    if not sev or not _ACTIVE_OVERLAY:
+        return None
+    return _ACTIVE_OVERLAY["severity_colors"].get(sev)
+
+
+def _worst_sev(sevs) -> Optional[str]:
+    rank = {"High": 3, "Medium": 2, "Low": 1}
+    best = None
+    for s in sevs:
+        if s and rank.get(s, 0) > rank.get(best, 0):
+            best = s
+    return best
+
+
 def _nd_subnet_nodes(subnet: dict, threshold: int, icons: dict):
-    """Render node list for a subnet: (label, tooltip, icon_abs)."""
+    """Render node list for a subnet: (label, tooltip, icon_abs, severity_or_None)."""
+    ov = _ACTIVE_OVERLAY
+    by_res = ov["by_resource"] if ov else {}
     nodes = []
     for rtype, g in sorted(subnet["groups"].items()):
-        names = g["names"]
+        entries = g["names"]
         icon = _stencil(g["icon"])
         disp = _display_name(rtype)
-        if len(names) <= threshold:
-            for nm in names:
-                nodes.append((nm, f"{rtype}\n{nm}", icon))
+        if len(entries) <= threshold:
+            for e in entries:
+                nm = e["name"] if isinstance(e, dict) else e
+                rid = (e.get("id") if isinstance(e, dict) else "") or ""
+                rec = by_res.get(rid) if rid else None
+                sev = rec["risk"] if rec else None
+                tip = f"{rtype}\n{nm}"
+                if rec and rec["findings"]:
+                    tip += "\n" + "\n".join(
+                        f"[{f['severity']}] {f['title']}"
+                        + (f" · {f['zt']}" if f.get("zt") else "")
+                        for f in rec["findings"][:4])
+                nodes.append((nm, tip, icon, sev))
         else:
-            nodes.append((f"{len(names)} × {disp}",
-                          f"{rtype}\nCount: {len(names)}", icon))
+            worst = _worst_sev(
+                (by_res.get((e.get("id") if isinstance(e, dict) else "") or "", {}).get("risk")
+                 for e in entries))
+            tip = f"{rtype}\nCount: {len(entries)}"
+            if worst:
+                tip += f"\nWorst severity: {worst}"
+            nodes.append((f"{len(entries)} × {disp}", tip, icon, worst))
     if subnet.get("loose_nics"):
         nodes.append((f"{subnet['loose_nics']} × NIC",
                       f"Unattached NICs: {subnet['loose_nics']}",
-                      _stencil(icons["nic"])))
+                      _stencil(icons["nic"]), None))
     return nodes
 
 
@@ -737,13 +757,19 @@ def _nd_render_subnet(page: _Page, subnet: dict, x: int, y: int, parent: str,
     if subnet.get("nsg"):
         page.vertex("", _icon_style(_stencil(icons["nsg"])),
                     w - 26, 6, 18, 18, parent=cont, tooltip="NSG associated")
-    for i, (label, tip, icon) in enumerate(nodes):
+    for i, (label, tip, icon, sev) in enumerate(nodes):
         r, c = divmod(i, cols)
         nx = PAD + c * ND_RES_W
         ny = ND_SN_HEADER + r * ND_RES_H
         page.vertex(label, _icon_style(icon),
                     nx + (ND_RES_W - ND_RES_ICON) // 2, ny + 4,
                     ND_RES_ICON, ND_RES_ICON, parent=cont, tooltip=tip)
+        color = _sev_color(sev)
+        if color:
+            page.vertex("", f"ellipse;html=1;fillColor={color};strokeColor=#FFFFFF;"
+                        f"strokeWidth=1;",
+                        nx + (ND_RES_W + ND_RES_ICON) // 2 - 6, ny + 2, 12, 12,
+                        parent=cont, tooltip=f"Risk: {sev}")
 
 
 def _nd_vnet_calc(vnet: dict, threshold: int, icons: dict) -> dict:
@@ -826,48 +852,54 @@ def _nd_draw_peerings(page: _Page, peerings: list, vmap: dict) -> None:
                   points=[(sx, lane_y), (dx, lane_y)])
 
 
-def _pages_network_detail(scan_data: dict, per_subscription: bool = False) -> List[_Page]:
-    """Network Detail page(s): resources placed inside their subnets, ARI-style.
+def _pages_network_detail(scan_data: dict, per_subscription: bool = False,
+                          overlay: Optional[dict] = None) -> List[_Page]:
+    """Network Detail page(s): resources placed inside their subnets.
     Returns [] when there are no VNets."""
     from processors.network_detail import build_network_detail
     from processors.network_topology import build_network_topology
 
-    nd = build_network_detail(scan_data)
-    subs = nd["subscriptions"]
-    if not subs:
-        return []
-    icons = nd["icons"]
-    threshold = nd["aggregate_threshold"]
-    peerings = build_network_topology(scan_data)["peerings"]
+    global _ACTIVE_OVERLAY
+    _ACTIVE_OVERLAY = overlay if (overlay and overlay.get("available")) else None
+    try:
+        nd = build_network_detail(scan_data)
+        subs = nd["subscriptions"]
+        if not subs:
+            return []
+        icons = nd["icons"]
+        threshold = nd["aggregate_threshold"]
+        peerings = build_network_topology(scan_data)["peerings"]
 
-    if per_subscription:
-        pages: List[_Page] = []
-        for i, sub in enumerate(subs):
-            page = _Page(f"ati-netdetail-{i}", f"Net-{sub['displayName']}"[:40])
-            page.vertex(f"Network Detail — {sub['displayName']}", _TITLE_STYLE,
-                        PAGE_MARGIN, PAGE_MARGIN, 1500, 40)
+        if per_subscription:
+            pages: List[_Page] = []
+            for i, sub in enumerate(subs):
+                page = _Page(f"ati-netdetail-{i}", f"Net-{sub['displayName']}"[:40])
+                page.vertex(f"Network Detail — {sub['displayName']}", _TITLE_STYLE,
+                            PAGE_MARGIN, PAGE_MARGIN, 1500, 40)
+                calc = _nd_sub_calc(sub, threshold, icons)
+                _, _, _, vmap = _nd_render_subscription(page, sub, PAGE_MARGIN,
+                                                        PAGE_MARGIN + 60, calc, icons)
+                _nd_draw_peerings(page, peerings, vmap)
+                pages.append(page)
+            return pages
+
+        page = _Page("ati-netdetail", "Network Detail")
+        st = nd["stats"]
+        page.vertex(
+            f"Network Detail — {st['subscription_count']} subs · {st['vnet_count']} VNets · "
+            f"{st['subnet_count']} subnets · {st['placed_resource_count']} resources placed",
+            _TITLE_STYLE, PAGE_MARGIN, PAGE_MARGIN, 1600, 40)
+        y = PAGE_MARGIN + 60
+        vmap_all: Dict[str, dict] = {}
+        for sub in subs:
             calc = _nd_sub_calc(sub, threshold, icons)
-            _, _, _, vmap = _nd_render_subscription(page, sub, PAGE_MARGIN,
-                                                    PAGE_MARGIN + 60, calc, icons)
-            _nd_draw_peerings(page, peerings, vmap)
-            pages.append(page)
-        return pages
-
-    page = _Page("ati-netdetail", "Network Detail")
-    st = nd["stats"]
-    page.vertex(
-        f"Network Detail — {st['subscription_count']} subs · {st['vnet_count']} VNets · "
-        f"{st['subnet_count']} subnets · {st['placed_resource_count']} resources placed",
-        _TITLE_STYLE, PAGE_MARGIN, PAGE_MARGIN, 1600, 40)
-    y = PAGE_MARGIN + 60
-    vmap_all: Dict[str, str] = {}
-    for sub in subs:
-        calc = _nd_sub_calc(sub, threshold, icons)
-        _, _, h, vmap = _nd_render_subscription(page, sub, PAGE_MARGIN, y, calc, icons)
-        vmap_all.update(vmap)
-        y += h + PAD * 2
-    _nd_draw_peerings(page, peerings, vmap_all)
-    return [page]
+            _, _, h, vmap = _nd_render_subscription(page, sub, PAGE_MARGIN, y, calc, icons)
+            vmap_all.update(vmap)
+            y += h + PAD * 2
+        _nd_draw_peerings(page, peerings, vmap_all)
+        return [page]
+    finally:
+        _ACTIVE_OVERLAY = None
 
 
 # ── Organization page (Phase 2c-Org) — Management Group tree (top-down) ────
@@ -958,15 +990,110 @@ def _page_organization(scan_data: dict) -> _Page:
     return page
 
 
+# ── Security Posture page (Phase 3) ───────────────────────────────────────
+def _page_security_posture(scan_data: dict, overlay: dict) -> Optional[_Page]:
+    """Per-subscription security posture tiles colored by risk + legend."""
+    if not overlay or not overlay.get("available"):
+        return None
+    by_sub = overlay["by_subscription"]
+    colors = overlay["severity_colors"]
+    st = overlay["stats"]
+    sub_names = {s.get("subscriptionId", ""): (s.get("displayName") or s.get("subscriptionId", ""))
+                 for s in scan_data.get("subscriptions", [])}
+
+    page = _Page("ati-security", "Security Posture")
+    page.vertex(
+        f"Security Posture — {st['resources_with_findings']} resources with findings "
+        f"({st['high']} High · {st['medium']} Medium · {st['low']} Low)",
+        _TITLE_STYLE, PAGE_MARGIN, PAGE_MARGIN, 1600, 40)
+
+    # Legend (severity colors).
+    lx = PAGE_MARGIN + 1180
+    page.vertex("Legend — Risk severity", _group_style("#7F7F7F", "#FFFFFF"),
+                lx, PAGE_MARGIN, 320, HEADER_H + len(colors) * 24 + PAD)
+    for i, (sev, color) in enumerate(colors.items()):
+        page.vertex(sev, f"rounded=0;html=1;fillColor=#FFFFFF;strokeColor={color};"
+                    f"fontColor={color};fontSize=11;align=left;spacingLeft=8;",
+                    lx + PAD, PAGE_MARGIN + HEADER_H + i * 24, 320 - 2 * PAD, 20)
+
+    TILE_W, TILE_H, GAP = 336, 176, 22
+    per_row = 4
+    order = {"High": 0, "Medium": 1, "Low": 2, "OK": 3}
+    items = sorted(by_sub.items(), key=lambda kv: (order.get(kv[1]["risk"], 9),
+                                                   sub_names.get(kv[0], kv[0]).lower()))
+    x0, y0 = PAGE_MARGIN, PAGE_MARGIN + 70
+    for idx, (sid, p) in enumerate(items):
+        r, c = divmod(idx, per_row)
+        tx = x0 + c * (TILE_W + GAP)
+        ty = y0 + r * (TILE_H + GAP)
+        risk = p["risk"]
+        color = colors.get(risk, "#7F7F7F")
+        name = sub_names.get(sid, sid)
+
+        # Card container (white, risk-colored border).
+        card = page.vertex(
+            "", f"rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor={color};"
+            f"strokeWidth=2;arcSize=5;", tx, ty, TILE_W, TILE_H,
+            tooltip=f"Subscription: {name}\nRisk: {risk}")
+
+        # Header strip: risk color, subscription icon + name + risk badge.
+        page.vertex(name, f"rounded=0;whiteSpace=wrap;html=1;fillColor={color};strokeColor=none;"
+                    f"fontColor=#FFFFFF;fontSize=12;fontStyle=1;align=left;verticalAlign=middle;"
+                    f"spacingLeft=38;", 0, 0, TILE_W, 36, parent=card)
+        page.vertex("", _icon_style(_stencil("general/Subscriptions.svg")),
+                    8, 7, 22, 22, parent=card)
+        page.vertex(f"{risk}", "rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;"
+                    f"strokeColor=none;fontColor=" + color + ";fontSize=10;fontStyle=1;"
+                    "align=center;verticalAlign=middle;", TILE_W - 74, 7, 64, 22, parent=card)
+
+        # Severity chips row.
+        chip_w = (TILE_W - 4 * 10) // 3
+        for i, sev in enumerate(("High", "Medium", "Low")):
+            cnt = p["counts"][sev]
+            scol = colors.get(sev, "#7F7F7F")
+            page.vertex(f"{sev}\n{cnt}",
+                        f"rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor={scol};"
+                        f"fontColor={scol};fontSize=10;fontStyle=1;align=center;verticalAlign=middle;",
+                        10 + i * (chip_w + 10), 46, chip_w, 40, parent=card)
+
+        # Defender coverage bar.
+        cov = p["defender_coverage_pct"]
+        if cov is None:
+            cov_txt, cov_col, cov_fill = "n/a", "#7F7F7F", "#F2F2F2"
+        else:
+            cov_txt = f"{cov}%"
+            cov_col = "#2E7D32" if cov >= 80 else "#C55A11" if cov >= 40 else "#C00000"
+            cov_fill = "#EAF3E1" if cov >= 80 else "#FCE9DA" if cov >= 40 else "#F8D7DA"
+        page.vertex(
+            f"Defender coverage: {cov_txt}  ({p['defender_standard']}/{p['defender_total']} plans)",
+            f"rounded=1;whiteSpace=wrap;html=1;fillColor={cov_fill};strokeColor={cov_col};"
+            f"fontColor={cov_col};fontSize=10;align=left;spacingLeft=8;verticalAlign=middle;",
+            10, 96, TILE_W - 20, 26, parent=card)
+
+        # Zero Trust breakdown.
+        zt = p["zt"]
+        zt_txt = " · ".join(f"{k}: {v}" for k, v in sorted(zt.items())) if zt else "—"
+        page.vertex(f"Zero Trust — {zt_txt}",
+                    "rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;"
+                    "fontColor=#555555;fontSize=9;align=left;spacingLeft=8;verticalAlign=top;",
+                    10, 128, TILE_W - 20, 40, parent=card)
+    return page
+
+
 def write_drawio(scan_data: dict, output_path: str,
-                 network_detail_per_subscription: bool = False) -> None:
+                 network_detail_per_subscription: bool = False,
+                 security_overlay: bool = True) -> None:
     logger.info(f"Building draw.io diagram: {output_path}")
+
+    from processors.security_overlay import build_security_overlay
+    overlay = build_security_overlay(scan_data) if security_overlay else None
 
     org_page = _page_organization(scan_data)
     sm_page = _page_group_by(scan_data, "ati-servicemodel", "Service Model", "service_model")
     pillar_page = _page_group_by(scan_data, "ati-pillar", "Business Pillar", "business_pillar")
     network_page = _page_network(scan_data)
-    detail_pages = _pages_network_detail(scan_data, network_detail_per_subscription)
+    detail_pages = _pages_network_detail(scan_data, network_detail_per_subscription, overlay)
+    security_page = _page_security_posture(scan_data, overlay) if overlay else None
     resource_pages = _pages_resources(scan_data)
 
     nav = [(org_page.id, org_page.name),
@@ -974,6 +1101,8 @@ def write_drawio(scan_data: dict, output_path: str,
     if network_page:
         nav.append((network_page.id, network_page.name))
     nav += [(p.id, p.name) for p in detail_pages[:12]]
+    if security_page:
+        nav.append((security_page.id, security_page.name))
     nav += [(p.id, f"Resources · {p.name}") for p in resource_pages[:12]]
     overview = _page_overview(scan_data, nav)
 
@@ -981,6 +1110,8 @@ def write_drawio(scan_data: dict, output_path: str,
     if network_page:
         all_pages.append(network_page)
     all_pages += detail_pages
+    if security_page:
+        all_pages.append(security_page)
     all_pages += resource_pages
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            '<mxfile host="AzureTenantInsights" type="device" version="1.0">'

@@ -870,25 +870,114 @@ def _pages_network_detail(scan_data: dict, per_subscription: bool = False) -> Li
     return [page]
 
 
+# ── Organization page (Phase 2c-Org) — Management Group tree (top-down) ────
+ORG_NODE_W = 180
+ORG_NODE_H = 52
+ORG_X_STEP = 200
+ORG_LEVEL_H = 110
+
+_ORG_STYLE = {
+    "tenant": ("#1F4E79", "#DCE6F1", "general/Management_Groups.svg"),
+    "mg": ("#2E86AB", "#EAF3FA", "general/Management_Groups.svg"),
+    "sub": ("#548235", "#EAF3E1", "general/Subscriptions.svg"),
+}
+_ORG_EDGE = (
+    "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#8FA2B5;strokeWidth=1;"
+    "endArrow=none;startArrow=none;exitX=0.5;exitY=1;exitDx=0;exitDy=0;"
+    "entryX=0.5;entryY=0;entryDx=0;entryDy=0;"
+)
+
+
+def _org_node_box(page: _Page, node: dict, px: int, py: int) -> str:
+    stroke, fill, icon_rel = _ORG_STYLE[node["kind"]]
+    label = node["label"]
+    if node["kind"] == "sub":
+        label = f"{label}\n{node.get('count', 0):,} resources"
+    box = page.vertex(
+        label,
+        f"rounded=1;whiteSpace=wrap;html=1;fillColor={fill};strokeColor={stroke};"
+        f"fontColor=#222222;fontSize=11;align=left;verticalAlign=middle;"
+        f"spacingLeft=44;arcSize=8;",
+        px, py, ORG_NODE_W, ORG_NODE_H,
+        tooltip=f"{node['kind'].upper()}: {node['label']}",
+    )
+    page.vertex("", _icon_style(_stencil(icon_rel)),
+                px + 10, py + (ORG_NODE_H - 28) // 2, 28, 28)
+    return box
+
+
+def _page_organization(scan_data: dict) -> _Page:
+    """Organization page: Tenant → Management Groups → Subscriptions tree."""
+    from processors.org_tree import build_org_tree
+
+    root = build_org_tree(scan_data)
+    st = root["_stats"]
+    page = _Page("ati-org", "Organization")
+    scope = "flat (no Management Groups)" if st["flat"] else f"{st['mg_count']} management groups"
+    page.vertex(f"Organization — {st['sub_count']} subscriptions · {scope}",
+                _TITLE_STYLE, PAGE_MARGIN, PAGE_MARGIN, 1500, 40)
+
+    def _sort(n: dict) -> None:
+        n["children"].sort(key=lambda c: (0 if c["kind"] == "mg" else 1, c["label"].lower()))
+        for c in n["children"]:
+            _sort(c)
+
+    _sort(root)
+
+    xc = [0]
+
+    def _pos(n: dict, depth: int) -> None:
+        n["_depth"] = depth
+        if not n["children"]:
+            n["_x"] = xc[0]
+            xc[0] += 1
+        else:
+            for c in n["children"]:
+                _pos(c, depth + 1)
+            n["_x"] = (n["children"][0]["_x"] + n["children"][-1]["_x"]) / 2
+
+    _pos(root, 0)
+
+    cells: Dict[int, str] = {}
+
+    def _render(n: dict) -> None:
+        px = PAGE_MARGIN + int(n["_x"] * ORG_X_STEP)
+        py = PAGE_MARGIN + 70 + n["_depth"] * ORG_LEVEL_H
+        cells[id(n)] = _org_node_box(page, n, px, py)
+        for c in n["children"]:
+            _render(c)
+
+    _render(root)
+
+    def _edges(n: dict) -> None:
+        for c in n["children"]:
+            page.edge(cells[id(n)], cells[id(c)], _ORG_EDGE)
+            _edges(c)
+
+    _edges(root)
+    return page
+
+
 def write_drawio(scan_data: dict, output_path: str,
                  network_detail_per_subscription: bool = False) -> None:
-    """Build the multi-page .drawio file and write it to output_path."""
     logger.info(f"Building draw.io diagram: {output_path}")
 
+    org_page = _page_organization(scan_data)
     sm_page = _page_group_by(scan_data, "ati-servicemodel", "Service Model", "service_model")
     pillar_page = _page_group_by(scan_data, "ati-pillar", "Business Pillar", "business_pillar")
     network_page = _page_network(scan_data)
     detail_pages = _pages_network_detail(scan_data, network_detail_per_subscription)
     resource_pages = _pages_resources(scan_data)
 
-    nav = [(sm_page.id, sm_page.name), (pillar_page.id, pillar_page.name)]
+    nav = [(org_page.id, org_page.name),
+           (sm_page.id, sm_page.name), (pillar_page.id, pillar_page.name)]
     if network_page:
         nav.append((network_page.id, network_page.name))
     nav += [(p.id, p.name) for p in detail_pages[:12]]
     nav += [(p.id, f"Resources · {p.name}") for p in resource_pages[:12]]
     overview = _page_overview(scan_data, nav)
 
-    all_pages = [overview, sm_page, pillar_page]
+    all_pages = [overview, org_page, sm_page, pillar_page]
     if network_page:
         all_pages.append(network_page)
     all_pages += detail_pages

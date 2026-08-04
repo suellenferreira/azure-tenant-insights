@@ -1,0 +1,57 @@
+# config/network_placement.yaml
+# ---------------------------------------------------------------------------
+# Config-driven placement of resources inside VNet subnets for the draw.io
+# "Network Detail" page. Fully declarative and flexible: to support a new
+# resource type, add one entry under `resolvers` (no code change).
+#
+# Each resolver lists JSON `paths` (dotted notation; a "[]" suffix iterates a
+# list) pointing to the resource's subnet id inside its `properties` blob.
+# The first non-empty match wins. Types with no resolver are simply not placed
+# on the Network Detail page (they still appear on the Resources page).
+# ---------------------------------------------------------------------------
+
+# Show up to N individually named icons per (subnet, type); above N, collapse to
+# a single aggregate node labeled "N x Type".
+aggregate_threshold: 8
+
+# VMs are placed via a two-hop join: VM -> NIC -> subnet.
+nic_type: microsoft.network/networkinterfaces
+vm_type: microsoft.compute/virtualmachines
+nic_subnet_paths:
+  - "properties.ipConfigurations[].properties.subnet.id"
+nic_vm_path: properties.virtualMachine.id
+
+# Direct subnet resolvers, keyed by (lower-case) resource type.
+resolvers:
+  microsoft.network/privateendpoints:
+    paths: ["properties.subnet.id"]
+    icon: networking/Private_Endpoint.svg
+  microsoft.network/azurefirewalls:
+    paths: ["properties.ipConfigurations[].properties.subnet.id"]
+    icon: networking/Firewalls.svg
+  microsoft.network/virtualnetworkgateways:
+    paths: ["properties.ipConfigurations[].properties.subnet.id"]
+    icon: networking/Virtual_Network_Gateways.svg
+    onprem: true                       # draw an On-Premises node + link
+    gateway_type_path: properties.gatewayType   # Vpn | ExpressRoute
+  microsoft.network/applicationgateways:
+    paths: ["properties.gatewayIPConfigurations[].properties.subnet.id"]
+    icon: networking/Application_Gateways.svg
+  microsoft.network/loadbalancers:
+    paths: ["properties.frontendIPConfigurations[].properties.subnet.id"]
+    icon: networking/Load_Balancers.svg
+  microsoft.network/bastionhosts:
+    paths: ["properties.ipConfigurations[].properties.subnet.id"]
+    icon: networking/Bastions.svg
+  microsoft.sql/managedinstances:
+    paths: ["properties.subnetId"]
+    icon: databases/SQL_Managed_Instance.svg
+
+# Icons used directly by the writer (relative to the Azure2 stencil base).
+vm_icon: compute/Virtual_Machine.svg
+nic_icon: networking/Network_Interfaces.svg
+nsg_icon: networking/Network_Security_Groups.svg
+onprem_icon: networking/Local_Network_Gateways.svg
+subnet_icon: networking/Subnet.svg
+vnet_icon: networking/Virtual_Networks.svg
+subscription_icon: general/Subscriptions.svg

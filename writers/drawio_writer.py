@@ -31,7 +31,7 @@ STENCILS_CONFIG_PATH = os.path.join(
 # (stroke, fill) per service model
 SERVICE_MODEL_COLORS: Dict[str, Tuple[str, str]] = {
     "IaaS": ("#1F4E79", "#DCE6F1"),
-    "PaaS": ("#2E86AB", "#D6E4F0"),
+    "PaaS": ("#155E7D", "#D6E4F0"),
     "SaaS": ("#548235", "#E2EFDA"),
     "Hybrid": ("#BF8F00", "#FFF2CC"),
     "Supporting Services": ("#C55A11", "#FCE4D6"),
@@ -123,6 +123,71 @@ _EDGE_BROKEN = (
     "exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;"
 )
 
+# ── Network Detail (Group B) layout constants and styles ──────────────────
+ND_RES_ICON = 36
+ND_RES_W = 104
+ND_RES_H = 64
+ND_SN_COLS = 4
+ND_SN_HEADER = 44
+ND_VNET_HEADER = 52
+ND_SUB_HEADER = 40
+ND_PAGE_WIDTH = 1620
+
+_EDGE_PEER_OK = (
+    "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#2E7D32;strokeWidth=2;"
+    "endArrow=none;startArrow=none;fontColor=#2E7D32;fontSize=10;"
+    "exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;"
+)
+_EDGE_PEER_BROKEN = (
+    "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C00000;strokeWidth=2;"
+    "dashed=1;endArrow=none;startArrow=none;fontColor=#C00000;fontSize=10;"
+    "exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;"
+)
+_EDGE_ONPREM = (
+    "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#0E7C7B;strokeWidth=2;"
+    "dashed=1;dashPattern=8 4;endArrow=none;startArrow=none;fontColor=#0E7C7B;fontSize=10;"
+)
+
+
+def _nd_sub_group_style() -> str:
+    return (
+        "rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#AAB2BD;dashed=1;"
+        "dashPattern=6 4;fontColor=#555555;fontSize=13;fontStyle=1;align=left;verticalAlign=top;"
+        "spacingLeft=36;spacingTop=8;arcSize=1;container=1;collapsible=0;"
+    )
+
+
+def _nd_subnet_style(special: Optional[str]) -> str:
+    palette = {
+        "gateway": ("#BF8F00", "#FFF2CC"),
+        "bastion": ("#2E75B6", "#DEEAF6"),
+        "firewall": ("#C55A11", "#FCE4D6"),
+        "routeserver": ("#7030A0", "#E9DDF3"),
+    }
+    stroke, fill = palette.get(special, ("#8FA2B5", "#F5F7FA"))
+    return (
+        f"rounded=1;whiteSpace=wrap;html=1;fillColor={fill};strokeColor={stroke};"
+        f"fontColor=#333333;fontSize=10;fontStyle=1;align=left;verticalAlign=top;"
+        f"spacingLeft=26;spacingTop=6;arcSize=6;container=1;collapsible=0;"
+    )
+
+
+def _flow_pack(dims: List[Tuple[int, int]], max_w: int, gap: int):
+    """Left-to-right flow packing. Returns (positions, inner_w, inner_h)."""
+    x = y = row_h = max_x = 0
+    pos: List[Tuple[int, int]] = []
+    for w, h in dims:
+        if x + w > max_w and x > 0:
+            x = 0
+            y += row_h + gap
+            row_h = 0
+        pos.append((x, y))
+        x += w + gap
+        row_h = max(row_h, h)
+        max_x = max(max_x, x - gap)
+    return pos, max_x, y + row_h
+
+
 
 def _esc(value) -> str:
     return _xml_escape("" if value is None else str(value), {'"': "&quot;", "'": "&apos;"})
@@ -190,7 +255,7 @@ class _Page:
         body = "".join(self.cells)
         return (
             f'<diagram id="{self.id}" name="{_esc(self.name)}">'
-            f'<mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" '
+            f'<mxGraphModel dx="1400" dy="900" grid="0" gridSize="10" guides="1" '
             f'tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" '
             f'pageWidth="1700" pageHeight="1200" math="0" shadow="0">'
             f'<root><mxCell id="0"/><mxCell id="1" parent="0"/>{body}</root>'
@@ -631,24 +696,202 @@ def _pages_resources(scan_data: dict) -> List[_Page]:
     return pages
 
 
-def write_drawio(scan_data: dict, output_path: str) -> None:
+# ── Network Detail (Group B) — resources inside subnets, ARI-style ────────
+def _nd_subnet_nodes(subnet: dict, threshold: int, icons: dict):
+    """Render node list for a subnet: (label, tooltip, icon_abs)."""
+    nodes = []
+    for rtype, g in sorted(subnet["groups"].items()):
+        names = g["names"]
+        icon = _stencil(g["icon"])
+        disp = _display_name(rtype)
+        if len(names) <= threshold:
+            for nm in names:
+                nodes.append((nm, f"{rtype}\n{nm}", icon))
+        else:
+            nodes.append((f"{len(names)} × {disp}",
+                          f"{rtype}\nCount: {len(names)}", icon))
+    if subnet.get("loose_nics"):
+        nodes.append((f"{subnet['loose_nics']} × NIC",
+                      f"Unattached NICs: {subnet['loose_nics']}",
+                      _stencil(icons["nic"])))
+    return nodes
+
+
+def _nd_subnet_calc(subnet: dict, threshold: int, icons: dict) -> dict:
+    nodes = _nd_subnet_nodes(subnet, threshold, icons)
+    n = len(nodes)
+    cols = min(ND_SN_COLS, n) if n else 1
+    rows = (n + cols - 1) // cols if n else 0
+    w = max(cols * ND_RES_W + 2 * PAD, 190)
+    h = ND_SN_HEADER + rows * ND_RES_H + (PAD if rows else 8)
+    return {"w": w, "h": h, "nodes": nodes, "cols": cols}
+
+
+def _nd_render_subnet(page: _Page, subnet: dict, x: int, y: int, parent: str,
+                      calc: dict, icons: dict) -> None:
+    w, h, nodes, cols = calc["w"], calc["h"], calc["nodes"], calc["cols"]
+    title = f"{subnet['name']}  {subnet.get('prefix') or ''}".strip()
+    cont = page.vertex(title, _nd_subnet_style(subnet.get("special")),
+                       x, y, w, h, parent=parent)
+    page.vertex("", _icon_style(_stencil(icons["subnet"])), 6, 6, 18, 18, parent=cont)
+    if subnet.get("nsg"):
+        page.vertex("", _icon_style(_stencil(icons["nsg"])),
+                    w - 26, 6, 18, 18, parent=cont, tooltip="NSG associated")
+    for i, (label, tip, icon) in enumerate(nodes):
+        r, c = divmod(i, cols)
+        nx = PAD + c * ND_RES_W
+        ny = ND_SN_HEADER + r * ND_RES_H
+        page.vertex(label, _icon_style(icon),
+                    nx + (ND_RES_W - ND_RES_ICON) // 2, ny + 4,
+                    ND_RES_ICON, ND_RES_ICON, parent=cont, tooltip=tip)
+
+
+def _nd_vnet_calc(vnet: dict, threshold: int, icons: dict) -> dict:
+    scs = [_nd_subnet_calc(sn, threshold, icons) for sn in vnet["subnets"]]
+    if scs:
+        pos, iw, ih = _flow_pack([(c["w"], c["h"]) for c in scs], 780, PAD)
+    else:
+        pos, iw, ih = [], 190, 8
+    w = max(iw + 2 * PAD, 220)
+    h = ND_VNET_HEADER + ih + PAD
+    return {"w": w, "h": h, "subnets": scs, "pos": pos}
+
+
+def _nd_render_vnet(page: _Page, vnet: dict, x: int, y: int, parent: str,
+                    calc: dict, icons: dict) -> str:
+    w, h = calc["w"], calc["h"]
+    title = (f"{vnet['name']} · {vnet.get('location') or '—'}\n"
+             f"CIDR: {', '.join(vnet.get('address_prefixes') or []) or '—'}")
+    cont = page.vertex(title, _group_style("#1F4E79", "#EAF1FA"), x, y, w, h, parent=parent)
+    page.vertex("", _icon_style(_stencil(icons["vnet"])), w - 30, 6, 24, 24, parent=cont)
+    for sn, (sx, sy), sc in zip(vnet["subnets"], calc["pos"], calc["subnets"]):
+        _nd_render_subnet(page, sn, PAD + sx, ND_VNET_HEADER + sy, cont, sc, icons)
+    return cont
+
+
+def _nd_sub_calc(sub: dict, threshold: int, icons: dict) -> dict:
+    vcs = [_nd_vnet_calc(v, threshold, icons) for v in sub["vnets"]]
+    if vcs:
+        pos, iw, ih = _flow_pack([(c["w"], c["h"]) for c in vcs],
+                                 ND_PAGE_WIDTH - 2 * PAD, PAD * 2)
+    else:
+        pos, iw, ih = [], 300, 40
+    w = max(iw + 2 * PAD, 320)
+    onp = 84 if sub.get("onprem") else 0
+    h = ND_SUB_HEADER + ih + PAD + onp
+    return {"w": w, "h": h, "inner_h": ih, "vnets": vcs, "pos": pos}
+
+
+def _nd_render_subscription(page: _Page, sub: dict, x: int, y: int,
+                            calc: dict, icons: dict) -> Tuple[str, int, int, dict]:
+    w, h = calc["w"], calc["h"]
+    cont = page.vertex(f"Subscription: {sub['displayName']}", _nd_sub_group_style(),
+                       x, y, w, h, parent="1")
+    page.vertex("", _icon_style(_stencil(icons["subscription"])), 8, 8, 22, 22, parent=cont)
+    vmap: Dict[str, dict] = {}
+    for v, (vx, vy), vc in zip(sub["vnets"], calc["pos"], calc["vnets"]):
+        vcont = _nd_render_vnet(page, v, PAD + vx, ND_SUB_HEADER + vy, cont, vc, icons)
+        vmap[v["id"]] = {
+            "cell": vcont,
+            "x": x + PAD + vx, "y": y + ND_SUB_HEADER + vy,
+            "w": vc["w"], "h": vc["h"],
+        }
+    if sub.get("onprem"):
+        oy = ND_SUB_HEADER + calc["inner_h"] + PAD
+        kinds = ", ".join(sub.get("gateway_kinds") or []) or "Gateway"
+        onp = page.vertex(f"On-Premises\n{kinds}", _icon_style(_stencil(icons["onprem"])),
+                          PAD, oy + 6, 44, 44, parent=cont,
+                          tooltip="On-premises connectivity via VPN / ExpressRoute gateway")
+        for v in sub["vnets"]:
+            if v.get("has_gateway") and v["id"] in vmap:
+                page.edge(onp, vmap[v["id"]]["cell"], _EDGE_ONPREM, label=kinds)
+    return cont, w, h, vmap
+
+
+def _nd_draw_peerings(page: _Page, peerings: list, vmap: dict) -> None:
+    """Route peering edges through a lane below the VNet row (absolute coords)
+    so they never cross an unrelated VNet box."""
+    lane = 0
+    for pe in peerings:
+        a, b = vmap.get(pe["src"]), vmap.get(pe["dst"])
+        if not a or not b:
+            continue
+        sx = a["x"] + a["w"] // 2
+        dx = b["x"] + b["w"] // 2
+        lane_y = max(a["y"] + a["h"], b["y"] + b["h"]) + 20 + lane * 14
+        lane += 1
+        style = _EDGE_PEER_BROKEN if pe["broken"] else _EDGE_PEER_OK
+        label = "Broken Peering" if pe["broken"] else "peering"
+        page.edge(a["cell"], b["cell"], style, label=label,
+                  points=[(sx, lane_y), (dx, lane_y)])
+
+
+def _pages_network_detail(scan_data: dict, per_subscription: bool = False) -> List[_Page]:
+    """Network Detail page(s): resources placed inside their subnets, ARI-style.
+    Returns [] when there are no VNets."""
+    from processors.network_detail import build_network_detail
+    from processors.network_topology import build_network_topology
+
+    nd = build_network_detail(scan_data)
+    subs = nd["subscriptions"]
+    if not subs:
+        return []
+    icons = nd["icons"]
+    threshold = nd["aggregate_threshold"]
+    peerings = build_network_topology(scan_data)["peerings"]
+
+    if per_subscription:
+        pages: List[_Page] = []
+        for i, sub in enumerate(subs):
+            page = _Page(f"ati-netdetail-{i}", f"Net-{sub['displayName']}"[:40])
+            page.vertex(f"Network Detail — {sub['displayName']}", _TITLE_STYLE,
+                        PAGE_MARGIN, PAGE_MARGIN, 1500, 40)
+            calc = _nd_sub_calc(sub, threshold, icons)
+            _, _, _, vmap = _nd_render_subscription(page, sub, PAGE_MARGIN,
+                                                    PAGE_MARGIN + 60, calc, icons)
+            _nd_draw_peerings(page, peerings, vmap)
+            pages.append(page)
+        return pages
+
+    page = _Page("ati-netdetail", "Network Detail")
+    st = nd["stats"]
+    page.vertex(
+        f"Network Detail — {st['subscription_count']} subs · {st['vnet_count']} VNets · "
+        f"{st['subnet_count']} subnets · {st['placed_resource_count']} resources placed",
+        _TITLE_STYLE, PAGE_MARGIN, PAGE_MARGIN, 1600, 40)
+    y = PAGE_MARGIN + 60
+    vmap_all: Dict[str, str] = {}
+    for sub in subs:
+        calc = _nd_sub_calc(sub, threshold, icons)
+        _, _, h, vmap = _nd_render_subscription(page, sub, PAGE_MARGIN, y, calc, icons)
+        vmap_all.update(vmap)
+        y += h + PAD * 2
+    _nd_draw_peerings(page, peerings, vmap_all)
+    return [page]
+
+
+def write_drawio(scan_data: dict, output_path: str,
+                 network_detail_per_subscription: bool = False) -> None:
     """Build the multi-page .drawio file and write it to output_path."""
     logger.info(f"Building draw.io diagram: {output_path}")
 
     sm_page = _page_group_by(scan_data, "ati-servicemodel", "Service Model", "service_model")
     pillar_page = _page_group_by(scan_data, "ati-pillar", "Business Pillar", "business_pillar")
     network_page = _page_network(scan_data)
+    detail_pages = _pages_network_detail(scan_data, network_detail_per_subscription)
     resource_pages = _pages_resources(scan_data)
 
     nav = [(sm_page.id, sm_page.name), (pillar_page.id, pillar_page.name)]
     if network_page:
         nav.append((network_page.id, network_page.name))
+    nav += [(p.id, p.name) for p in detail_pages[:12]]
     nav += [(p.id, f"Resources · {p.name}") for p in resource_pages[:12]]
     overview = _page_overview(scan_data, nav)
 
     all_pages = [overview, sm_page, pillar_page]
     if network_page:
         all_pages.append(network_page)
+    all_pages += detail_pages
     all_pages += resource_pages
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            '<mxfile host="AzureTenantInsights" type="device" version="1.0">'
@@ -658,3 +901,4 @@ def write_drawio(scan_data: dict, output_path: str) -> None:
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(xml)
     logger.info(f"draw.io diagram saved: {output_path} ({len(all_pages)} pages)")
+

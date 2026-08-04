@@ -99,6 +99,31 @@ def _icon_style(image_path: str) -> str:
     )
 
 
+def _stencil(rel_path: str) -> str:
+    """Absolute stencil image ref from a path relative to the Azure2 base."""
+    return f"{_load_stencils()['base']}/{rel_path}"
+
+
+# Reserved-subnet role → Azure icon (relative to the stencil base).
+_SUBNET_ICON = {
+    "gateway": "networking/Virtual_Network_Gateways.svg",
+    "bastion": "networking/Bastions.svg",
+    "firewall": "networking/Firewalls.svg",
+    "routeserver": "networking/Route_Tables.svg",
+}
+_VNET_ICON_REL = "networking/Virtual_Networks.svg"
+_EDGE_OK = (
+    "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#2E7D32;strokeWidth=2;"
+    "endArrow=none;startArrow=none;fontColor=#2E7D32;fontSize=10;jettySize=auto;"
+    "exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;"
+)
+_EDGE_BROKEN = (
+    "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C00000;strokeWidth=2;"
+    "dashed=1;endArrow=none;startArrow=none;fontColor=#C00000;fontSize=10;jettySize=auto;"
+    "exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;"
+)
+
+
 def _esc(value) -> str:
     return _xml_escape("" if value is None else str(value), {'"': "&quot;", "'": "&apos;"})
 
@@ -143,6 +168,21 @@ class _Page:
             f'<UserObject label="{_esc(value)}" link="data:page/id,{target_page_id}" id="{cid}">'
             f'<mxCell style="{style}" vertex="1" parent="{parent}">{geom}</mxCell>'
             f'</UserObject>'
+        )
+        return cid
+
+    def edge(self, source_id, target_id, style, label="", parent="1", points=None):
+        cid = self._next("e")
+        val = f' value="{_esc(label)}"' if label else ""
+        if points:
+            pts = "".join(f'<mxPoint x="{int(px)}" y="{int(py)}"/>' for px, py in points)
+            geom = (f'<mxGeometry relative="1" as="geometry">'
+                    f'<Array as="points">{pts}</Array></mxGeometry>')
+        else:
+            geom = '<mxGeometry relative="1" as="geometry"/>'
+        self.cells.append(
+            f'<mxCell id="{cid}"{val} style="{style}" edge="1" parent="{parent}" '
+            f'source="{source_id}" target="{target_id}">{geom}</mxCell>'
         )
         return cid
 
@@ -234,6 +274,17 @@ def _type_tooltip(rtype: str, n: int, cls: dict) -> str:
             f"Publisher: {cls['publisher']}")
 
 
+def _add_sm_legend(page: _Page, x: int, y: int) -> None:
+    """Service Model color legend box at (x, y)."""
+    page.vertex("Legend — Service Model colors", _group_style("#7F7F7F", "#FFFFFF"),
+                x, y, 300, HEADER_H + len(SERVICE_MODEL_COLORS) * 28 + PAD)
+    for i, (model, (stroke, fill)) in enumerate(SERVICE_MODEL_COLORS.items()):
+        page.vertex(model,
+                    f"rounded=1;whiteSpace=wrap;html=1;fillColor={fill};strokeColor={stroke};"
+                    f"fontColor={stroke};fontSize=11;align=left;spacingLeft=8;",
+                    x + PAD, y + HEADER_H + i * 28, 300 - 2 * PAD, 24)
+
+
 def _page_group_by(scan_data: dict, page_id: str, name: str, key: str) -> _Page:
     from processors.classifier import classify_resource_type, service_model_order
 
@@ -267,6 +318,8 @@ def _page_group_by(scan_data: dict, page_id: str, name: str, key: str) -> _Page:
                   if key == "service_model" else pillar_colors[g])
         _, h = _layout_group(page, g, items, colors, PAGE_MARGIN, y)
         y += h + PAD * 2
+    if key == "service_model":
+        _add_sm_legend(page, PAGE_MARGIN + 960, PAGE_MARGIN + 60)
     return page
 
 
@@ -309,15 +362,203 @@ def _page_overview(scan_data: dict, pages: List[Tuple[str, str]]) -> _Page:
     for i, (pid, pname) in enumerate(pages):
         page.link(f"→ {pname}", link_style,
                   PAGE_MARGIN + PAD, ny + HEADER_H + i * (44 + 10), 380 - 2 * PAD, 44, pid)
+    return page
 
-    lx = PAGE_MARGIN + 440
-    page.vertex("Legend — Service Model colors", _group_style("#7F7F7F", "#FFFFFF"),
-                lx, ny, 320, HEADER_H + len(SERVICE_MODEL_COLORS) * 28 + PAD)
-    for i, (model, (stroke, fill)) in enumerate(SERVICE_MODEL_COLORS.items()):
-        page.vertex(model,
-                    f"rounded=1;whiteSpace=wrap;html=1;fillColor={fill};strokeColor={stroke};"
-                    f"fontColor={stroke};fontSize=11;align=left;spacingLeft=8;",
-                    lx + PAD, ny + HEADER_H + i * 28, 320 - 2 * PAD, 24)
+
+def _layout_vnet(page: _Page, vnet: dict, x: int, y: int) -> Tuple[str, int, int]:
+    """Render a VNet as a container of subnet nodes. Returns (container_id, w, h)."""
+    subnets = vnet.get("subnets", [])
+    n = max(len(subnets), 1)
+    cols = min(GROUP_COLS, n)
+    rows = (n + cols - 1) // cols
+    header = 48  # two lines: name/region + CIDR
+    w = cols * NODE_W + 2 * PAD
+    h = header + rows * NODE_H + PAD
+
+    cidr = ", ".join(vnet.get("address_prefixes") or []) or "—"
+    title = f"{vnet['name']}  ·  {vnet.get('location') or '—'}\nCIDR: {cidr}"
+    cont = page.vertex(title, _group_style("#1F4E79", "#DCE6F1"), x, y, w, h)
+
+    # VNet icon badge in the top-right corner of the container.
+    page.vertex("", _icon_style(_stencil(_VNET_ICON_REL)),
+                w - 30, 6, 24, 24, parent=cont)
+
+    for i, sn in enumerate(subnets):
+        r, c = divmod(i, cols)
+        nx = PAD + c * NODE_W
+        ny = header + r * NODE_H
+        special = sn.get("special")
+        tip = (f"Subnet: {sn['name']}\nPrefix: {sn.get('prefix') or '—'}"
+               + (f"\nRole: {special}" if special else ""))
+        icon_rel = _SUBNET_ICON.get(special)
+        label = f"{sn['name']}\n{sn.get('prefix') or ''}".strip()
+        if icon_rel:
+            page.vertex(label, _icon_style(_stencil(icon_rel)),
+                        nx + (NODE_W - ICON) // 2, ny + 6, ICON, ICON,
+                        parent=cont, tooltip=tip)
+        else:
+            page.vertex(label, _card_style("#7F7F7F"),
+                        nx + 6, ny + 16, NODE_W - 12, 46, parent=cont, tooltip=tip)
+    return cont, w, h
+
+
+def _page_network(scan_data: dict) -> Optional[_Page]:
+    """Network Topology page: VNets (with subnets) + peering edges.
+    Returns None when the tenant has no virtual networks."""
+    from processors.network_topology import build_network_topology
+
+    topo = build_network_topology(scan_data)
+    vnets = topo["vnets"]
+    if not vnets:
+        return None
+
+    st = topo["stats"]
+    page = _Page("ati-network", "Network Topology")
+    page.vertex(
+        f"Network Topology — {st['vnet_count']} VNets · {st['subnet_count']} subnets · "
+        f"{st['peering_count']} peerings · {st['broken_count']} broken/orphan",
+        _TITLE_STYLE, PAGE_MARGIN, PAGE_MARGIN, 1500, 40)
+
+    # Legend (peering edge colors).
+    lx = PAGE_MARGIN + 1180
+    page.vertex("Legend", _group_style("#7F7F7F", "#FFFFFF"), lx, PAGE_MARGIN, 320, 90)
+    page.vertex("Peering: Connected", "rounded=0;html=1;fillColor=#FFFFFF;strokeColor=#2E7D32;"
+                "fontColor=#2E7D32;fontSize=11;align=left;spacingLeft=8;",
+                lx + PAD, PAGE_MARGIN + HEADER_H, 320 - 2 * PAD, 20)
+    page.vertex("Peering: Disconnected / orphan", "rounded=0;html=1;fillColor=#FFFFFF;"
+                "strokeColor=#C00000;fontColor=#C00000;fontSize=11;align=left;spacingLeft=8;dashed=1;",
+                lx + PAD, PAGE_MARGIN + HEADER_H + 24, 320 - 2 * PAD, 20)
+
+    # ---- Connectivity-aware placement (item 5): keep peered VNets adjacent and
+    # route each peering edge through a lane *below* its row, so it never crosses
+    # an unrelated VNet. In-scope peerings define connected components; each
+    # component gets its own row (hub first, then BFS neighbours). Isolated VNets
+    # flow-pack afterwards. Orphan peerings link to external placeholders.
+    page_right = PAGE_MARGIN + 1620
+    vnet_by_id = {v["id"]: v for v in vnets}
+    id_set = set(vnet_by_id)
+
+    in_scope = [pe for pe in topo["peerings"] if pe["dst"] in id_set]
+    orphans = [pe for pe in topo["peerings"] if pe["dst"] not in id_set]
+
+    adj: Dict[str, set] = {i: set() for i in vnet_by_id}
+    for pe in in_scope:
+        adj[pe["src"]].add(pe["dst"])
+        adj[pe["dst"]].add(pe["src"])
+
+    seen: set = set()
+    components: List[List[str]] = []
+    for i in sorted(vnet_by_id, key=lambda n: vnet_by_id[n]["name"]):
+        if i in seen or not adj[i]:
+            continue
+        stack, comp = [i], []
+        while stack:
+            x = stack.pop()
+            if x in seen:
+                continue
+            seen.add(x)
+            comp.append(x)
+            stack.extend(adj[x] - seen)
+        components.append(comp)
+    components.sort(key=len, reverse=True)
+
+    def _order_component(comp: List[str]) -> List[str]:
+        hub = max(sorted(comp), key=lambda n: len(adj[n]))
+        order, cseen, queue = [], set(), [hub]
+        while queue:
+            n = queue.pop(0)
+            if n in cseen:
+                continue
+            cseen.add(n)
+            order.append(n)
+            queue.extend(sorted(adj[n] - cseen, key=lambda m: -len(adj[m])))
+        return order
+
+    def _vnet_dims(v: dict) -> Tuple[int, int]:
+        k = max(len(v["subnets"]), 1)
+        cols = min(GROUP_COLS, k)
+        rows = (k + cols - 1) // cols
+        return cols * NODE_W + 2 * PAD, 48 + rows * NODE_H + PAD
+
+    pos: Dict[str, str] = {}
+    geom: Dict[str, Tuple[int, int, int, int]] = {}
+    comp_of: Dict[str, int] = {}
+    comp_lane_y: Dict[int, int] = {}
+
+    y = PAGE_MARGIN + 140  # start below the legend (fixes item 2 overlap)
+
+    for ci, comp in enumerate(components):
+        comp_set = set(comp)
+        x = PAGE_MARGIN
+        row_h = 0
+        for vid in _order_component(comp):
+            v = vnet_by_id[vid]
+            w, h = _vnet_dims(v)
+            cont, _, _ = _layout_vnet(page, v, x, y)
+            pos[vid] = cont
+            geom[vid] = (x, y, w, h)
+            comp_of[vid] = ci
+            x += w + PAD * 2
+            row_h = max(row_h, h)
+        row_bottom = y + row_h
+        n_edges = sum(1 for pe in in_scope
+                      if pe["src"] in comp_set and pe["dst"] in comp_set)
+        comp_lane_y[ci] = row_bottom + 24
+        y = row_bottom + 24 + max(1, n_edges) * 16 + PAD * 2
+
+    # Isolated VNets (no in-scope peering) flow-pack after the components.
+    x_cursor = PAGE_MARGIN
+    row_y = y
+    row_max_h = 0
+    for vid in sorted((i for i in vnet_by_id if i not in pos),
+                      key=lambda n: (vnet_by_id[n]["subscriptionId"], vnet_by_id[n]["name"])):
+        v = vnet_by_id[vid]
+        w, h = _vnet_dims(v)
+        if x_cursor + w > page_right and x_cursor > PAGE_MARGIN:
+            x_cursor = PAGE_MARGIN
+            row_y += row_max_h + PAD * 2
+            row_max_h = 0
+        cont, _, _ = _layout_vnet(page, v, x_cursor, row_y)
+        pos[vid] = cont
+        geom[vid] = (x_cursor, row_y, w, h)
+        x_cursor += w + PAD * 2
+        row_max_h = max(row_max_h, h)
+
+    # In-scope peering edges routed through their component's lane.
+    lane_used: Dict[int, int] = {}
+    for pe in in_scope:
+        ci = comp_of.get(pe["src"])
+        if ci is None or pe["src"] not in geom or pe["dst"] not in geom:
+            continue
+        x1, _, w1, _ = geom[pe["src"]]
+        x2, _, w2, _ = geom[pe["dst"]]
+        sx, dx = x1 + w1 // 2, x2 + w2 // 2
+        k = lane_used.get(ci, 0)
+        lane_used[ci] = k + 1
+        lane_y = comp_lane_y[ci] + k * 16
+        style = _EDGE_BROKEN if pe["broken"] else _EDGE_OK
+        page.edge(pos[pe["src"]], pos[pe["dst"]], style, label=pe["state"],
+                  points=[(sx, lane_y), (dx, lane_y)])
+
+    # External (orphan) VNet placeholders + dashed edges beneath the topology.
+    ext_pos: Dict[str, str] = {}
+    ext_x = PAGE_MARGIN
+    ext_y = row_y + row_max_h + PAD * 3
+    for pe in orphans:
+        if pe["src"] not in pos:
+            continue
+        if pe["dst"] not in ext_pos:
+            node = page.vertex(
+                f"External VNet\n{pe['dst_name']}", _card_style("#C00000"),
+                ext_x, ext_y, 170, 60,
+                tooltip=f"Peered VNet outside scan scope\n{pe['dst']}")
+            ext_pos[pe["dst"]] = node
+            ext_x += 190
+            if ext_x > page_right:
+                ext_x = PAGE_MARGIN
+                ext_y += 80
+        page.edge(pos[pe["src"]], ext_pos[pe["dst"]], _EDGE_BROKEN, label="orphan")
+
     return page
 
 
@@ -396,13 +637,19 @@ def write_drawio(scan_data: dict, output_path: str) -> None:
 
     sm_page = _page_group_by(scan_data, "ati-servicemodel", "Service Model", "service_model")
     pillar_page = _page_group_by(scan_data, "ati-pillar", "Business Pillar", "business_pillar")
+    network_page = _page_network(scan_data)
     resource_pages = _pages_resources(scan_data)
 
     nav = [(sm_page.id, sm_page.name), (pillar_page.id, pillar_page.name)]
+    if network_page:
+        nav.append((network_page.id, network_page.name))
     nav += [(p.id, f"Resources · {p.name}") for p in resource_pages[:12]]
     overview = _page_overview(scan_data, nav)
 
-    all_pages = [overview, sm_page, pillar_page] + resource_pages
+    all_pages = [overview, sm_page, pillar_page]
+    if network_page:
+        all_pages.append(network_page)
+    all_pages += resource_pages
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            '<mxfile host="AzureTenantInsights" type="device" version="1.0">'
            + "".join(p.to_xml() for p in all_pages)

@@ -30,13 +30,14 @@
 
 ## Overview
 
-Azure Tenant Insights (ATI) scans an Azure tenant (single or multiple subscriptions, or a Management Group hierarchy) and produces three output files:
+Azure Tenant Insights (ATI) scans an Azure tenant (single or multiple subscriptions, or a Management Group hierarchy) and produces four output files:
 
 | Output | Audience | Contents |
 |---|---|---|
 | `*_Inventory.xlsx` | All teams | Structured, multi-sheet Excel inventory organized by resource type |
 | `*_Executive.html` | C-Level / Stakeholders | Risk score, KPIs, strategic recommendations, modernization signals |
 | `*_Technical.html` | Engineers / Architects | WAF pillar findings, policy violations, misconfigs, health, deprecated resources |
+| `*.drawio` | Architects | Multi-page architecture diagram (Overview, Service Model, Business Pillar, per-subscription Resources) with real Azure icons — open in [draw.io](https://app.diagrams.net) |
 
 All data is sourced **exclusively from official Azure APIs** — Azure Resource Graph, Azure Advisor, Azure Policy Insights, Resource Health, and optionally Defender for Cloud and Cost Management.
 
@@ -47,6 +48,7 @@ All data is sourced **exclusively from official Azure APIs** — Azure Resource 
 - **Dynamic resource-type coverage** — every resource type in the tenant is discovered and captured automatically. New Azure types are handled generically (no code change); per-type enrichment is optional and additive via `config/resource_enrichment.yaml`.
 - **Structured multi-sheet Excel** — one sheet per resource type with declarative property enrichment, a flat `AllResources` table, an **Index** navigation sheet (hyperlinks to every tab, with per-sheet back-links), a **Category** column (Azure-native / Hybrid-Arc / Migrate), and a **Data Collection Notes** section.
 - **Dual HTML reports** — an Executive report (risk score, KPIs, priority-colored recommendation cards, Zero Trust posture) and a Technical report (WAF pillar findings, policy, misconfigs, health, deprecated resources); both self-contained, with collapsible sections and offline-friendly tables.
+- **draw.io architecture diagram** — a multi-page `.drawio` with real Azure icons: Overview (KPIs + cross-page links), Service Model, Business Pillar, and one Resources page per subscription. Config-driven icon map with a generic fallback, so new Azure resource types are diagrammed automatically. Skip with `--no-diagram`.
 - **WAF pillar mapping** — Advisor recommendations organized by Well-Architected Framework pillar.
 - **Rules-based misconfiguration detection** — official-source rules mapped to Zero Trust principles.
 - **Policy compliance & deprecated-resource detection** — non-compliant resources and matches against official Azure retirement announcements.
@@ -226,6 +228,7 @@ All data sources are **enabled by default**. Use `--skip-*` flags to exclude the
 | `--report-name <NAME>` | Custom prefix for report files |
 | `--no-excel` | Skip Excel inventory generation |
 | `--no-html` | Skip HTML reports generation |
+| `--no-diagram` | Skip draw.io architecture diagram generation |
 
 ### Performance
 

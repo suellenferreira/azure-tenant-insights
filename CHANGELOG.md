@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Architecture Diagram — draw.io (Phase D)**
+- New `writers/drawio_writer.py` generates a multi-page `.drawio` (diagrams.net) architecture diagram: **Overview** (KPIs by Service Model and Business Pillar with cross-page links), **Service Model**, **Business Pillar**, and one **Resources** page per subscription (resource-group containers with `N × Type` nodes, region, and classification tooltips).
+- Real **Azure 2019 icon stencils** driven by `config/drawio_stencils.yaml` (exact type → provider namespace fallback). A generic `All_Resources` fallback icon guarantees every node is iconified — keeping the diagram flexible for brand-new Azure resource types.
+- Row-based flow layout for resource-group containers (no overlap regardless of type count); subscription pages are prefixed with `Sub-` for quick navigation.
+- `invoke_ati.py` gains a `--no-diagram` flag to skip diagram generation; `*.drawio` outputs are git-ignored.
+
 **Resource Classification Taxonomy (Phase C)**
 - Config-driven 3-tier taxonomy (`config/resource_classification.yaml`) + `processors/classifier.py`: Technical Category, Business Pillar, Service Model (IaaS/PaaS/SaaS/Hybrid/Supporting Services/Other), and Publisher (Microsoft/Third-party). Matching precedence: exact type → provider namespace → third-party/default.
 - New Excel **`Classification`** sheet (right after `Index`) with summary pivots (by Service Model and by Business Pillar) and a per-type detail table.

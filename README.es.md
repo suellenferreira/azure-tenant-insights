@@ -30,13 +30,14 @@
 
 ## Descripción General
 
-Azure Tenant Insights (ATI) analiza un tenant de Azure (suscripciones únicas o múltiples, o jerarquía de Management Groups) y produce tres archivos de salida:
+Azure Tenant Insights (ATI) analiza un tenant de Azure (suscripciones únicas o múltiples, o jerarquía de Management Groups) y produce cuatro archivos de salida:
 
 | Salida | Audiencia | Contenido |
 |---|---|---|
 | `*_Inventory.xlsx` | Todos los equipos | Inventario Excel estructurado y multi-hoja, organizado por tipo de recurso |
 | `*_Executive.html` | C-Level / Interesados | Puntuación de riesgo, KPIs, recomendaciones estratégicas, señales de modernización |
 | `*_Technical.html` | Ingenieros / Arquitectos | Hallazgos por pilar WAF, violaciones de policy, misconfigs, salud, recursos deprecados |
+| `*.drawio` | Arquitectos | Diagrama de arquitectura multi-página (Overview, Service Model, Business Pillar, Recursos por suscripción) con iconos Azure reales — abra en [draw.io](https://app.diagrams.net) |
 
 Todos los datos se obtienen **exclusivamente de APIs oficiales de Azure** — Azure Resource Graph, Azure Advisor, Azure Policy Insights, Resource Health y, opcionalmente, Defender for Cloud y Cost Management.
 
@@ -47,6 +48,7 @@ Todos los datos se obtienen **exclusivamente de APIs oficiales de Azure** — Az
 - **Cobertura dinámica de tipos de recurso** — todos los tipos del tenant se descubren y capturan automáticamente. Los nuevos tipos de Azure se tratan genéricamente (sin cambios de código); el enriquecimiento por tipo es opcional y aditivo vía `config/resource_enrichment.yaml`.
 - **Excel estructurado multi-hoja** — una hoja por tipo de recurso con enriquecimiento declarativo, la tabla plana `AllResources`, una hoja de navegación **Index** (hipervínculos a cada pestaña, con enlaces de retorno por hoja), una columna **Category** (Azure nativo / Híbrido-Arc / Migrate) y una sección **Data Collection Notes**.
 - **Informes HTML duales** — Ejecutivo (puntuación de riesgo, KPIs, tarjetas de recomendaciones por prioridad, postura Zero Trust) y Técnico (hallazgos por pilar WAF, policy, misconfigs, salud, recursos deprecados); ambos autocontenidos, con secciones plegables y tablas utilizables sin conexión.
+- **Diagrama de arquitectura draw.io** — un `.drawio` multi-página con iconos Azure reales: Overview (KPIs + enlaces entre páginas), Service Model, Business Pillar y una página de Recursos por suscripción. Mapa de iconos basado en configuración con fallback genérico, por lo que los nuevos tipos de recurso de Azure se diagraman automáticamente. Omita con `--no-diagram`.
 - **Mapeo de pilares WAF** — recomendaciones del Advisor organizadas por pilar del Well-Architected Framework.
 - **Detección de misconfiguraciones basada en reglas** — reglas de fuentes oficiales mapeadas a principios Zero Trust.
 - **Conformidad de Policy y detección de recursos deprecados** — recursos no conformes y coincidencias con anuncios oficiales de retiro de Azure.
@@ -215,6 +217,7 @@ Todas las fuentes de datos están **activas por defecto**. Usa `--skip-*` para e
 | `--report-name <NOMBRE>` | Prefijo personalizado para los nombres de archivos de informe |
 | `--no-excel` | Omitir generación del inventario Excel |
 | `--no-html` | Omitir generación de informes HTML |
+| `--no-diagram` | Omitir generación del diagrama de arquitectura draw.io |
 
 ### Rendimiento
 

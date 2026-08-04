@@ -1,0 +1,117 @@
+# Azure 2019 stencil map for the draw.io writer.
+# Image paths VERIFIED against jgraph/drawio  src/main/webapp/img/lib/azure2/
+# (folders: compute, networking, databases). Resource types not listed fall back
+# to a colored card (so there are never broken icons).
+#
+# Lookup precedence (writers/drawio_writer.py): exact type -> provider namespace.
+
+base: "img/lib/azure2"
+
+# Generic Azure icon for any resource type without a specific or namespace match.
+# Keeps the diagram fully iconified and flexible for brand-new Azure resource types.
+fallback: general/All_Resources.svg
+
+# ── Exact resource-type icons ────────────────────────────────────────────────
+types:
+  # Compute
+  microsoft.compute/virtualmachines: compute/Virtual_Machine.svg
+  microsoft.compute/virtualmachinescalesets: compute/VM_Scale_Sets.svg
+  microsoft.compute/disks: compute/Disks.svg
+  microsoft.compute/snapshots: compute/Disks_Snapshots.svg
+  microsoft.compute/availabilitysets: compute/Availability_Sets.svg
+  microsoft.compute/images: compute/Images.svg
+  microsoft.compute/galleries: compute/Shared_Image_Galleries.svg
+  microsoft.batch/batchaccounts: compute/Batch_Accounts.svg
+  microsoft.servicefabric/clusters: compute/Service_Fabric_Clusters.svg
+  microsoft.containerservice/managedclusters: compute/Kubernetes_Services.svg
+  microsoft.containerinstance/containergroups: compute/Container_Instances.svg
+  microsoft.web/sites: compute/App_Services.svg
+  microsoft.web/serverfarms: compute/App_Services.svg
+  microsoft.web/staticsites: compute/App_Services.svg
+
+  # Networking
+  microsoft.network/virtualnetworks: networking/Virtual_Networks.svg
+  microsoft.network/subnets: networking/Subnet.svg
+  microsoft.network/networkinterfaces: networking/Network_Interfaces.svg
+  microsoft.network/networksecuritygroups: networking/Network_Security_Groups.svg
+  microsoft.network/publicipaddresses: networking/Public_IP_Addresses.svg
+  microsoft.network/loadbalancers: networking/Load_Balancers.svg
+  microsoft.network/applicationgateways: networking/Application_Gateways.svg
+  microsoft.network/azurefirewalls: networking/Firewalls.svg
+  microsoft.network/frontdoors: networking/Front_Doors.svg
+  microsoft.network/routetables: networking/Route_Tables.svg
+  microsoft.network/privateendpoints: networking/Private_Endpoint.svg
+  microsoft.network/privatelinkservices: networking/Private_Link.svg
+  microsoft.network/virtualnetworkgateways: networking/Virtual_Network_Gateways.svg
+  microsoft.network/localnetworkgateways: networking/Local_Network_Gateways.svg
+  microsoft.network/connections: networking/Connections.svg
+  microsoft.network/bastionhosts: networking/Bastions.svg
+  microsoft.network/dnszones: networking/DNS_Zones.svg
+  microsoft.network/privatednszones: networking/DNS_Zones.svg
+  microsoft.network/expressroutecircuits: networking/ExpressRoute_Circuits.svg
+  microsoft.network/trafficmanagerprofiles: networking/Traffic_Manager_Profiles.svg
+  microsoft.network/virtualwans: networking/Virtual_WANs.svg
+  microsoft.network/natgateways: networking/NAT.svg
+  microsoft.network/networkwatchers: networking/Network_Watcher.svg
+  microsoft.cdn/profiles: networking/CDN_Profiles.svg
+
+  # Databases
+  microsoft.documentdb/databaseaccounts: databases/Azure_Cosmos_DB.svg
+  microsoft.sql/servers: databases/SQL_Server.svg
+  microsoft.sql/servers/databases: databases/SQL_Database.svg
+  microsoft.sql/managedinstances: databases/SQL_Managed_Instance.svg
+  microsoft.cache/redis: databases/Cache_Redis.svg
+  microsoft.synapse/workspaces: databases/Azure_Synapse_Analytics.svg
+  microsoft.datafactory/factories: databases/Data_Factory.svg
+  microsoft.kusto/clusters: databases/Azure_Data_Explorer_Clusters.svg
+  microsoft.purview/accounts: databases/Azure_Purview_Accounts.svg
+
+  # Storage / Security / Migration / Backup / Governance
+  microsoft.storage/storageaccounts: storage/Storage_Accounts.svg
+  microsoft.keyvault/vaults: security/Key_Vaults.svg
+  microsoft.recoveryservices/vaults: storage/Recovery_Services_Vaults.svg
+  microsoft.migrate/projects: migrate/Azure_Migrate.svg
+  microsoft.migrate/assessmentprojects: migrate/Azure_Migrate.svg
+  microsoft.migrate/movecollections: migrate/Azure_Migrate.svg
+  microsoft.servicebus/namespaces: general/Service_Bus.svg
+  microsoft.resources/resourcegroups: general/Resource_Groups.svg
+  microsoft.resources/subscriptions: general/Subscriptions.svg
+  microsoft.management/managementgroups: general/Management_Groups.svg
+
+# ── Provider-namespace fallback icons (used when the exact type is not mapped) ─
+namespaces:
+  microsoft.compute: compute/Virtual_Machine.svg
+  microsoft.containerservice: compute/Kubernetes_Services.svg
+  microsoft.containerinstance: compute/Container_Instances.svg
+  microsoft.web: compute/App_Services.svg
+  microsoft.network: networking/Virtual_Networks.svg
+  microsoft.cdn: networking/CDN_Profiles.svg
+  microsoft.documentdb: databases/Azure_Cosmos_DB.svg
+  microsoft.sql: databases/SQL_Database.svg
+  microsoft.dbforpostgresql: databases/Azure_Database_PostgreSQL_Server.svg
+  microsoft.dbformysql: databases/Azure_Database_MySQL_Server.svg
+  microsoft.dbformariadb: databases/Azure_Database_MariaDB_Server.svg
+  microsoft.cache: databases/Cache_Redis.svg
+  microsoft.synapse: databases/Azure_Synapse_Analytics.svg
+  microsoft.datafactory: databases/Data_Factory.svg
+  microsoft.kusto: databases/Azure_Data_Explorer_Clusters.svg
+  # Storage
+  microsoft.storage: storage/Storage_Accounts.svg
+  microsoft.storagesync: storage/Storage_Sync_Services.svg
+  microsoft.netapp: storage/Azure_NetApp_Files.svg
+  microsoft.datalakestore: storage/Data_Lake_Storage_Gen1.svg
+  # Security
+  microsoft.keyvault: security/Key_Vaults.svg
+  microsoft.security: security/Azure_Defender.svg
+  microsoft.securityinsights: security/Azure_Sentinel.svg
+  # Backup & DR
+  microsoft.recoveryservices: storage/Recovery_Services_Vaults.svg
+  microsoft.dataprotection: storage/Recovery_Services_Vaults.svg
+  # Migration
+  microsoft.migrate: migrate/Azure_Migrate.svg
+  microsoft.offazure: migrate/Azure_Migrate.svg
+  microsoft.datamigration: databases/Azure_Database_Migration_Services.svg
+  # Integration / governance
+  microsoft.servicebus: general/Service_Bus.svg
+  microsoft.management: general/Management_Groups.svg
+  microsoft.resources: general/Resource_Groups.svg

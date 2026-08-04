@@ -17,6 +17,7 @@
 - [Item 6: CAF Landing Zone Observations](#item-6-caf-landing-zone-observations)
 - [Item 7: Defender Posture, Coverage Gap & Live Pricing](#item-7-defender-for-cloud--posture-coverage-gap--live-pricing)
 - [Item 8: Excel Navigation & Report UX Enhancements](#item-8-excel-navigation--report-ux-enhancements)
+- [Item 9: Resource Classification Taxonomy](#item-9-resource-classification-taxonomy)
 - [Data Sources & References](#data-sources--references)
 
 ---
@@ -527,6 +528,28 @@ Adds navigation, classification, and transparency features across the Excel work
 - WAF findings tables use **progressive loading** (30 rows at a time, up to 300 per pillar; the full list is in the Excel export). Column filters remain search-all across loaded rows.
 - **Column search** on the **Defender Plans by Subscription** table.
 - Subtle header link to the **Data Collection Notes**.
+
+---
+
+## Item 9: Resource Classification Taxonomy
+
+### What It Does
+Classifies every resource type into a 3-tier assessment taxonomy plus a Publisher axis, driven by `config/resource_classification.yaml`.
+
+- **Tier 1 — Technical Category** (~20): Compute-VMs, Compute-Containers, Compute-Platform Apps, Networking, Storage, Database-Relational/NoSQL, Cache, Analytics & Data Platform, AI & ML, Integration & Messaging, API Management, Identity & Access, Security, Monitoring & Operations, Backup & DR, Governance, Hybrid & Multicloud, Migration, DevOps & Automation, IoT.
+- **Tier 2 — Business Pillar** (~12): Compute, AI, Data Platform, Network, Storage, Security, Integration, Operations, Business Continuity, Hybrid, Governance, Migration.
+- **Tier 3 — Service Model**: IaaS | PaaS | SaaS | Hybrid | **Supporting Services** | Other. Cross-cutting services (Monitor, Defender, Key Vault, Policy, Log Analytics, Backup, Automation) are grouped as **Supporting Services**.
+- **Publisher**: Microsoft (namespace `microsoft.*`) vs Third-party (Marketplace / partner providers).
+
+### How It Works
+`processors/classifier.py::classify_resource_type()` resolves each type by precedence: **exact type → provider namespace → third-party/default**, returning `{technical_category, business_pillar, service_model, publisher}`.
+
+### Where It Appears
+- **Excel `Classification` sheet** (right after `Index`): summary pivots (by Service Model and by Business Pillar) + a per-type table (`Resource Type | Technical Category | Business Pillar | Service Model | Publisher | Count | Sheet Tab`).
+- **`AllResources`**: new `Business Pillar` and `Service Model` columns.
+- **`Overview`**: a `SERVICE MODEL` summary block alongside `RESOURCE ORIGIN`.
+
+The taxonomy is fully editable and also feeds the planned draw.io **Service-Model** / **Business-Pillar** diagram pages.
 
 ---
 

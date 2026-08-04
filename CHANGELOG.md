@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Architecture Diagram — draw.io (Phase D)**
+- New `writers/drawio_writer.py` generates a multi-page `.drawio` (diagrams.net) architecture diagram: **Overview** (KPIs by Service Model and Business Pillar with cross-page links), **Service Model**, **Business Pillar**, and one **Resources** page per subscription (resource-group containers with `N × Type` nodes, region, and classification tooltips).
+- **Network Topology** page (`processors/network_topology.py`): VNets rendered as containers (CIDR + VNet corner icon) holding their subnets, with Azure icons for reserved subnets (GatewaySubnet / AzureBastionSubnet / AzureFirewallSubnet). Peering edges are colored **green (Connected)** / **red dashed (Disconnected or orphan)**; peerings to VNets outside the scan scope link to an **External VNet** placeholder. Connectivity-aware layout places peered VNets adjacently and routes edges through a lane below each row to avoid crossing unrelated VNets. Derived entirely from already-collected Resource Graph data (no extra Azure calls) and skipped when the tenant has no VNets.
+- **Network Detail** page (`processors/network_detail.py` + `config/network_placement.yaml`): ARI-style view placing resources **inside their subnets** — VMs (via NIC join), Private Endpoints, Azure Firewall, VPN/ExpressRoute Gateways, Application Gateways, Load Balancers, Bastion, SQL Managed Instance — with an **NSG shield** per subnet, **loose (unattached) NIC** aggregation, and an **On-Premises** node per subscription that has a VPN/ExpressRoute gateway. Subscriptions are grouped in a subtle bordered container with the Subscriptions icon; resources aggregate to `N × Type` above a configurable threshold (default 8). Placement is config-driven (subnet-resolution JSON paths), so new resource types need only a YAML entry. A `--network-detail-per-subscription` flag renders one page per subscription for very large tenants; peering edges are lane-routed with a **Broken Peering** marker on disconnected links.
+- Diagrams are generated **without gridlines** (`grid="0"`) for a cleaner canvas on open.
+- Real **Azure 2019 icon stencils** driven by `config/drawio_stencils.yaml` (exact type → provider namespace fallback). A generic `All_Resources` fallback icon guarantees every node is iconified — keeping the diagram flexible for brand-new Azure resource types.
+- Row-based flow layout for resource-group containers (no overlap regardless of type count); subscription pages are prefixed with `Sub-` for quick navigation.
+- `invoke_ati.py` gains a `--no-diagram` flag to skip diagram generation; `*.drawio` outputs are git-ignored.
+
+**Resource Classification Taxonomy (Phase C)**
+- Config-driven 3-tier taxonomy (`config/resource_classification.yaml`) + `processors/classifier.py`: Technical Category, Business Pillar, Service Model (IaaS/PaaS/SaaS/Hybrid/Supporting Services/Other), and Publisher (Microsoft/Third-party). Matching precedence: exact type → provider namespace → third-party/default.
+- New Excel **`Classification`** sheet (right after `Index`) with summary pivots (by Service Model and by Business Pillar) and a per-type detail table.
+- `AllResources` gains **Business Pillar** and **Service Model** columns; `Overview` gains a **Service Model** summary block.
+
 **Excel Navigation, Category & Report UX (Phase C)**
 - Excel: new **`Index`** navigation sheet (after `Overview`) with a hyperlink to every tab, plus a **↩ Index** back-link on each sheet.
 - Excel: collision-free, namespace-aware per-type sheet names — a short provider prefix is added only when two providers would otherwise produce the same name (e.g. `Cmp-Virtualmachinetemplates` vs `VMw-Virtualmachinetemplates`).

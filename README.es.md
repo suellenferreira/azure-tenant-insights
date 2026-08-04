@@ -30,13 +30,14 @@
 
 ## Descripción General
 
-Azure Tenant Insights (ATI) analiza un tenant de Azure (suscripciones únicas o múltiples, o jerarquía de Management Groups) y produce tres archivos de salida:
+Azure Tenant Insights (ATI) analiza un tenant de Azure (suscripciones únicas o múltiples, o jerarquía de Management Groups) y produce cuatro archivos de salida:
 
 | Salida | Audiencia | Contenido |
 |---|---|---|
 | `*_Inventory.xlsx` | Todos los equipos | Inventario Excel estructurado y multi-hoja, organizado por tipo de recurso |
 | `*_Executive.html` | C-Level / Interesados | Puntuación de riesgo, KPIs, recomendaciones estratégicas, señales de modernización |
 | `*_Technical.html` | Ingenieros / Arquitectos | Hallazgos por pilar WAF, violaciones de policy, misconfigs, salud, recursos deprecados |
+| `*.drawio` | Arquitectos | Diagrama de arquitectura multi-página (Overview, Service Model, Business Pillar, Recursos por suscripción) con iconos Azure reales — abra en [draw.io](https://app.diagrams.net) |
 
 Todos los datos se obtienen **exclusivamente de APIs oficiales de Azure** — Azure Resource Graph, Azure Advisor, Azure Policy Insights, Resource Health y, opcionalmente, Defender for Cloud y Cost Management.
 
@@ -47,6 +48,7 @@ Todos los datos se obtienen **exclusivamente de APIs oficiales de Azure** — Az
 - **Cobertura dinámica de tipos de recurso** — todos los tipos del tenant se descubren y capturan automáticamente. Los nuevos tipos de Azure se tratan genéricamente (sin cambios de código); el enriquecimiento por tipo es opcional y aditivo vía `config/resource_enrichment.yaml`.
 - **Excel estructurado multi-hoja** — una hoja por tipo de recurso con enriquecimiento declarativo, la tabla plana `AllResources`, una hoja de navegación **Index** (hipervínculos a cada pestaña, con enlaces de retorno por hoja), una columna **Category** (Azure nativo / Híbrido-Arc / Migrate) y una sección **Data Collection Notes**.
 - **Informes HTML duales** — Ejecutivo (puntuación de riesgo, KPIs, tarjetas de recomendaciones por prioridad, postura Zero Trust) y Técnico (hallazgos por pilar WAF, policy, misconfigs, salud, recursos deprecados); ambos autocontenidos, con secciones plegables y tablas utilizables sin conexión.
+- **Diagrama de arquitectura draw.io** — un `.drawio` multi-página con iconos Azure reales: Overview (KPIs + enlaces entre páginas), Service Model, Business Pillar, **Network Topology** (VNets/subnets/peering con detección de peering roto), una página **Network Detail** (recursos dentro de sus subredes, estilo ARI: VMs, private endpoints, firewall, gateways, escudo NSG, nodo On-Premises) y una página de Recursos por suscripción. Mapa de iconos basado en configuración con fallback genérico, por lo que los nuevos tipos de recurso de Azure se diagraman automáticamente. Omita con `--no-diagram`.
 - **Mapeo de pilares WAF** — recomendaciones del Advisor organizadas por pilar del Well-Architected Framework.
 - **Detección de misconfiguraciones basada en reglas** — reglas de fuentes oficiales mapeadas a principios Zero Trust.
 - **Conformidad de Policy y detección de recursos deprecados** — recursos no conformes y coincidencias con anuncios oficiales de retiro de Azure.
@@ -215,6 +217,8 @@ Todas las fuentes de datos están **activas por defecto**. Usa `--skip-*` para e
 | `--report-name <NOMBRE>` | Prefijo personalizado para los nombres de archivos de informe |
 | `--no-excel` | Omitir generación del inventario Excel |
 | `--no-html` | Omitir generación de informes HTML |
+| `--no-diagram` | Omitir generación del diagrama de arquitectura draw.io |
+| `--network-detail-per-subscription` | Network Detail: una página por suscripción (para tenants muy grandes) |
 
 ### Rendimiento
 
@@ -250,10 +254,11 @@ Los informes generados pueden incluir metadatos del tenant, IDs de suscripción,
 
 | Hoja | Contenido |
 |---|---|
-| `Overview` | Resumen de KPIs, principales tipos de recurso, Advisor por pilar WAF, **Resource Origin** (Azure nativo / Híbrido-Arc / Migrate) y **Data Collection Notes** |
+| `Overview` | Resumen de KPIs, principales tipos de recurso, Advisor por pilar WAF, **Resource Origin** (Azure nativo / Híbrido-Arc / Migrate), un resumen de **Service Model** (IaaS/PaaS/SaaS/Hybrid/Supporting) y **Data Collection Notes** |
 | `Index` | Hoja de navegación (después de `Overview`) con un hipervínculo a cada pestaña; cada hoja tiene un enlace **↩ Index** de retorno |
+| `Classification` | **Taxonomía** de recursos por tipo — Categoría Técnica, Pilar de Negocio, Service Model, Publisher (Microsoft/Third-party) — con pivotes de resumen (config-driven) |
 | `Subscriptions` | Una fila por suscripción con conteo de recursos |
-| `AllResources` | Tabla plana de TODOS los recursos en todos los tipos, con una columna **Category** (Azure nativo / Híbrido-Arc / Migrate) |
+| `AllResources` | Tabla plana de TODOS los recursos en todos los tipos, con una columna **Category** (Azure nativo / Híbrido-Arc / Migrate), columnas **Business Pillar** y **Service Model** |
 | `[TipoRecurso]` | Una hoja por tipo de recurso (ej.: `VirtualMachines`) |
 | `AdvisorFindings` | Todas las recomendaciones del Advisor con pilar WAF |
 | `PolicyCompliance` | Recursos no conformes con policies |

@@ -30,13 +30,14 @@
 
 ## Overview
 
-Azure Tenant Insights (ATI) scans an Azure tenant (single or multiple subscriptions, or a Management Group hierarchy) and produces three output files:
+Azure Tenant Insights (ATI) scans an Azure tenant (single or multiple subscriptions, or a Management Group hierarchy) and produces four output files:
 
 | Output | Audience | Contents |
 |---|---|---|
 | `*_Inventory.xlsx` | All teams | Structured, multi-sheet Excel inventory organized by resource type |
 | `*_Executive.html` | C-Level / Stakeholders | Risk score, KPIs, strategic recommendations, modernization signals |
 | `*_Technical.html` | Engineers / Architects | WAF pillar findings, policy violations, misconfigs, health, deprecated resources |
+| `*.drawio` | Architects | Multi-page architecture diagram (Overview, Service Model, Business Pillar, per-subscription Resources) with real Azure icons — open in [draw.io](https://app.diagrams.net) |
 
 All data is sourced **exclusively from official Azure APIs** — Azure Resource Graph, Azure Advisor, Azure Policy Insights, Resource Health, and optionally Defender for Cloud and Cost Management.
 
@@ -47,6 +48,7 @@ All data is sourced **exclusively from official Azure APIs** — Azure Resource 
 - **Dynamic resource-type coverage** — every resource type in the tenant is discovered and captured automatically. New Azure types are handled generically (no code change); per-type enrichment is optional and additive via `config/resource_enrichment.yaml`.
 - **Structured multi-sheet Excel** — one sheet per resource type with declarative property enrichment, a flat `AllResources` table, an **Index** navigation sheet (hyperlinks to every tab, with per-sheet back-links), a **Category** column (Azure-native / Hybrid-Arc / Migrate), and a **Data Collection Notes** section.
 - **Dual HTML reports** — an Executive report (risk score, KPIs, priority-colored recommendation cards, Zero Trust posture) and a Technical report (WAF pillar findings, policy, misconfigs, health, deprecated resources); both self-contained, with collapsible sections and offline-friendly tables.
+- **draw.io architecture diagram** — a multi-page `.drawio` with real Azure icons: Overview (KPIs + cross-page links), Service Model, Business Pillar, **Network Topology** (VNets/subnets/peering with broken-peering detection), a **Network Detail** page (resources placed inside their subnets, ARI-style: VMs, private endpoints, firewall, gateways, NSG shield, On-Premises node), and one Resources page per subscription. Config-driven icon map with a generic fallback, so new Azure resource types are diagrammed automatically. Skip with `--no-diagram`.
 - **WAF pillar mapping** — Advisor recommendations organized by Well-Architected Framework pillar.
 - **Rules-based misconfiguration detection** — official-source rules mapped to Zero Trust principles.
 - **Policy compliance & deprecated-resource detection** — non-compliant resources and matches against official Azure retirement announcements.
@@ -226,6 +228,8 @@ All data sources are **enabled by default**. Use `--skip-*` flags to exclude the
 | `--report-name <NAME>` | Custom prefix for report files |
 | `--no-excel` | Skip Excel inventory generation |
 | `--no-html` | Skip HTML reports generation |
+| `--no-diagram` | Skip draw.io architecture diagram generation |
+| `--network-detail-per-subscription` | Network Detail: one page per subscription (for very large tenants) |
 
 ### Performance
 
@@ -263,10 +267,11 @@ Three files are generated per run:
 
 | Sheet | Contents |
 |---|---|
-| `Overview` | KPI summary, top resource types, Advisor by WAF pillar, **Resource Origin** (Azure-native / Hybrid-Arc / Migrate), and **Data Collection Notes** |
+| `Overview` | KPI summary, top resource types, Advisor by WAF pillar, **Resource Origin** (Azure-native / Hybrid-Arc / Migrate), a **Service Model** summary (IaaS/PaaS/SaaS/Hybrid/Supporting), and **Data Collection Notes** |
 | `Index` | Navigation sheet (positioned after `Overview`) with a hyperlink to every tab; each sheet has a **↩ Index** back-link |
+| `Classification` | Resource **taxonomy** per type — Technical Category, Business Pillar, Service Model, Publisher (Microsoft/Third-party) — with summary pivots (config-driven) |
 | `Subscriptions` | Resource aggregation by subscription, resource group, location, and resource type |
-| `AllResources` | Flat table across all types with common Azure Resource Graph / ARM columns, a **Category** column (Azure-native / Hybrid-Arc / Migrate), and raw properties |
+| `AllResources` | Flat table across all types with common Azure Resource Graph / ARM columns, a **Category** column (Azure-native / Hybrid-Arc / Migrate), **Business Pillar** and **Service Model** columns, and raw properties |
 | `[ResourceType]` | One sheet per resource type using configured display names and declarative property enrichment |
 | `AdvisorFindings` | All Advisor recommendations with WAF pillar |
 | `PolicyCompliance` | Non-compliant resources |

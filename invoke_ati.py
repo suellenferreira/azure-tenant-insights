@@ -148,6 +148,11 @@ RBAC Requirements:
                         help="Skip Excel inventory generation")
     output.add_argument("--no-html", action="store_true",
                         help="Skip HTML report generation")
+    output.add_argument("--no-diagram", action="store_true",
+                        help="Skip draw.io diagram generation")
+    output.add_argument("--network-detail-per-subscription", action="store_true",
+                        help="Network Detail: one page per subscription instead of a "
+                             "single page (useful for very large tenants)")
 
     # ── Performance ──────────────────────────────────────────────
     perf = parser.add_argument_group("Performance")
@@ -505,6 +510,14 @@ def main() -> None:
             tech_path = output_dir / f"{report_prefix}_Technical.html"
             write_technical_report(scan_data, str(tech_path))
             output_files.append(str(tech_path))
+
+        if not args.no_diagram:
+            logger.info("Generating draw.io diagram...")
+            from writers.drawio_writer import write_drawio
+            diagram_path = output_dir / f"{report_prefix}_Diagram.drawio"
+            write_drawio(scan_data, str(diagram_path),
+                         network_detail_per_subscription=args.network_detail_per_subscription)
+            output_files.append(str(diagram_path))
 
         # ── Summary ───────────────────────────────────────────────
         elapsed = time.time() - start_time

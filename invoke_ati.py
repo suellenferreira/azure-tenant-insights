@@ -155,6 +155,8 @@ RBAC Requirements:
     output.add_argument("--network-detail-per-subscription", action="store_true",
                         help="Network Detail: one page per subscription instead of a "
                              "single page (useful for very large tenants)")
+    output.add_argument("--no-security-overlay", action="store_true",
+                        help="Disable the diagram Security Posture overlay (badges + page)")
 
     # ── Performance ──────────────────────────────────────────────
     perf = parser.add_argument_group("Performance")
@@ -531,7 +533,8 @@ def main() -> None:
             from writers.drawio_writer import write_drawio
             diagram_path = output_dir / f"{report_prefix}_Diagram.drawio"
             write_drawio(scan_data, str(diagram_path),
-                         network_detail_per_subscription=args.network_detail_per_subscription)
+                         network_detail_per_subscription=args.network_detail_per_subscription,
+                         security_overlay=not args.no_security_overlay)
             output_files.append(str(diagram_path))
 
         # ── Summary ───────────────────────────────────────────────

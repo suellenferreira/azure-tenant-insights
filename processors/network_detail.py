@@ -185,14 +185,15 @@ def build_network_detail(scan_data: dict) -> Dict[str, Any]:
         subs.setdefault(sid, {"vnets": {}, "onprem": False, "gateway_kinds": set()})
         subs[sid]["vnets"][vid] = vnet
 
-    def _place(subnet_id: Optional[str], rtype: str, icon: str, name: str) -> bool:
+    def _place(subnet_id: Optional[str], rtype: str, icon: str, name: str,
+               rid: str = "") -> bool:
         if not subnet_id:
             return False
         sn = subnet_by_id.get(subnet_id.lower())
         if sn is None:
             return False
         g = sn["groups"].setdefault(rtype, {"icon": icon, "names": []})
-        g["names"].append(name)
+        g["names"].append({"name": name, "id": (rid or "").lower()})
         return True
 
     placed = 0
@@ -221,7 +222,7 @@ def build_network_detail(scan_data: dict) -> Dict[str, Any]:
     for vm in rbt.get(vm_type, []) or []:
         vid = (vm.get("id") or "").lower()
         subnet_id = vm_subnet.get(vid)
-        if _place(subnet_id, vm_type, vm_icon, vm.get("name") or _short_id(vid)):
+        if _place(subnet_id, vm_type, vm_icon, vm.get("name") or _short_id(vid), vid):
             placed += 1
 
     # ---- Direct resolvers (PE, firewall, gateways, app gw, lb, bastion, SQL MI) ----
@@ -236,7 +237,7 @@ def build_network_detail(scan_data: dict) -> Dict[str, Any]:
             subnet_ids = _all_by_paths(r, paths)
             done = False
             for snid in subnet_ids:
-                if _place(snid, rtype, icon, name):
+                if _place(snid, rtype, icon, name, r.get("id", "")):
                     done = True
                     break
             if done:

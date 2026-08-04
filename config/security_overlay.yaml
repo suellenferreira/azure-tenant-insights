@@ -1,0 +1,31 @@
+# config/security_overlay.yaml
+# ---------------------------------------------------------------------------
+# Drives the Security Posture overlay on the draw.io diagram: severity colors,
+# how findings map to a risk level, and the Zero Trust principle mapping.
+# Fully declarative so severities/colors/mappings can be tuned without code.
+# ---------------------------------------------------------------------------
+
+# Risk severity -> color (used for node severity badges and subscription tiles).
+severity_colors:
+  High: "#C00000"
+  Medium: "#C55A11"
+  Low: "#BF8F00"
+  OK: "#2E7D32"
+
+# Ranking used to compute the worst severity per resource/subscription.
+severity_rank:
+  High: 3
+  Medium: 2
+  Low: 1
+
+# Azure Policy non-compliance carries no severity of its own; treat as this.
+policy_default_severity: Medium
+
+# Zero Trust principle -> misconfiguration rule ids (from config/misconfiguration_rules.yaml).
+zero_trust:
+  Verify Explicitly:
+    [STG-001, STG-003, APP-001, APP-002, APP-003, SQL-002, REDIS-001, REDIS-002]
+  Use Least Privilege:
+    [KV-001, KV-002, AKS-001]
+  Assume Breach:
+    [STG-002, STG-004, SQL-001, KV-003, COSMOS-001, REDIS-003, PG-001, MYSQL-001]

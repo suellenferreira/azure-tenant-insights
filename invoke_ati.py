@@ -137,6 +137,8 @@ RBAC Requirements:
                           help="Skip Azure Policy compliance collection")
     optional.add_argument("--skip-advisor", action="store_true",
                           help="Skip Azure Advisor recommendations")
+    optional.add_argument("--skip-org", action="store_true",
+                          help="Skip Management Group hierarchy collection (Organization diagram)")
 
     # ── Output ───────────────────────────────────────────────────
     output = parser.add_argument_group("Output")
@@ -427,6 +429,18 @@ def main() -> None:
             )
             logger.info(f"Costs: {len(costs_data)} cost records")
 
+        # ── 8b. Management Group hierarchy (for the Organization diagram) ───────
+        management_groups = None
+        if not args.skip_org and not args.no_diagram:
+            logger.info("Collecting Management Group hierarchy...")
+            from collectors.mgmt_groups import get_management_group_tree
+            management_groups = get_management_group_tree(
+                credential=credential,
+                subscription_ids=subscription_ids,
+                throttle_delay=args.throttle_delay,
+                tenant_name=tenant_name,
+            )
+
         # ── 9. Processing ─────────────────────────────────────────
         # Uninstall warning capture before processing phase
         logging.getLogger().removeHandler(_warn_handler)
@@ -471,6 +485,7 @@ def main() -> None:
             "collection_warnings": collection_warnings,
             "subscriptions": subscriptions,
             "resources_by_type": resources_by_type,
+            "management_groups": management_groups,
             "advisor_data": advisor_data,
             "policy_data": policy_data,
             "health_data": health_data,

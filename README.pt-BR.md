@@ -48,7 +48,7 @@ Todos os dados são obtidos **exclusivamente de APIs oficiais do Azure** — Azu
 - **Cobertura dinâmica de tipos de recurso** — todos os tipos do tenant são descobertos e capturados automaticamente. Novos tipos do Azure são tratados genericamente (sem alteração de código); o enriquecimento por tipo é opcional e aditivo via `config/resource_enrichment.yaml`.
 - **Excel estruturado multi-abas** — uma aba por tipo de recurso com enriquecimento declarativo, a tabela plana `AllResources`, uma aba de navegação **Index** (hyperlinks para todas as abas, com links de retorno por aba), uma coluna **Category** (Azure nativo / Híbrido-Arc / Migrate) e uma seção **Data Collection Notes**.
 - **Relatórios HTML duplos** — Executivo (score de risco, KPIs, cards de recomendações por prioridade, postura Zero Trust) e Técnico (findings por pilar WAF, policy, misconfigs, saúde, recursos deprecados); ambos autocontidos, com seções recolhíveis e tabelas utilizáveis offline.
-- **Diagrama de arquitetura draw.io** — um `.drawio` multi-página com ícones Azure reais: Overview (KPIs + links entre páginas), Service Model, Business Pillar, **Network Topology** (VNets/subnets/peering com detecção de peering quebrado), uma página **Network Detail** (recursos dentro das subnets, estilo ARI: VMs, private endpoints, firewall, gateways, escudo NSG, nó On-Premises) e uma página de Recursos por assinatura. Mapa de ícones orientado por configuração com fallback genérico, então novos tipos de recurso do Azure são diagramados automaticamente. Pule com `--no-diagram`.
+- **Diagrama de arquitetura draw.io** — um `.drawio` multi-página com ícones Azure reais: Overview (KPIs + links entre páginas), **Organization** (árvore Tenant → Management Groups → Subscriptions com contagem de recursos), Service Model, Business Pillar, **Network Topology** (VNets/subnets/peering com detecção de peering quebrado), uma página **Network Detail** (recursos dentro das subnets, estilo ARI: VMs, private endpoints, firewall, gateways, escudo NSG, nó On-Premises) e uma página de Recursos por assinatura. Mapa de ícones orientado por configuração com fallback genérico, então novos tipos de recurso do Azure são diagramados automaticamente. Pule com `--no-diagram`.
 - **Mapeamento para pilares WAF** — recomendações do Advisor organizadas por pilar do Well-Architected Framework.
 - **Detecção de misconfiguração baseada em regras** — regras de fontes oficiais mapeadas para princípios Zero Trust.
 - **Conformidade de Policy e detecção de recursos deprecados** — recursos não conformes e correspondências a anúncios oficiais de aposentadoria do Azure.
@@ -217,6 +217,7 @@ python invoke_ati.py
 | `--no-html` | Pular geração dos relatórios HTML |
 | `--no-diagram` | Pular geração do diagrama de arquitetura draw.io |
 | `--network-detail-per-subscription` | Network Detail: uma página por assinatura (para tenants muito grandes) |
+| `--skip-org` | Pular coleta da hierarquia de Management Groups (diagrama Organization) |
 
 ### Performance
 

@@ -35,6 +35,7 @@ AzureTenantInsights/
 output-*/
 *.xlsx
 *.html
+*.drawio
 *.log
 
 # OS files

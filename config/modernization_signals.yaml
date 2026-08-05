@@ -1,0 +1,237 @@
+# config/modernization_signals.yaml
+# ===========================================================================
+# Cloud Modernization & Opportunity Assessment — signal & scoring definitions.
+#
+# This drives the INFERRED modernization assessment: per-dimension maturity/
+# adoption scores (0-100) with a confidence level and supporting evidence.
+# It is intentionally NON-prescriptive: it surfaces *signals* and *opportunity
+# indicators*, never deterministic "do X" recommendations. Everything is
+# derived from data already collected by the scan (no extra Azure calls) and
+# from the classifier taxonomy (service_model / business_pillar / publisher).
+#
+# All resource types are official lower-case ARM provider types.
+# No third-party vendors are named anywhere (public-repo safe); third-party
+# presence is only ever expressed as a neutral Microsoft-vs-Third-party split.
+# ===========================================================================
+
+version: 1
+
+# Global label applied to the whole assessment in every report.
+inferred_label: >-
+  INFERRED — signals derived from resource inventory. Indicative only; validate
+  against your architecture and standards. Not a prescriptive recommendation.
+
+# Heatmap score bands (lower bound is inclusive of the previous band's max+1).
+# NOTE: a LOW score means LOW adoption → HIGH modernization opportunity.
+score_bands:
+  - { max: 33,  level: Low,          color: "#C00000", label: "High opportunity" }
+  - { max: 66,  level: Intermediate, color: "#C55A11", label: "Intermediate" }
+  - { max: 100, level: High,         color: "#2E7D32", label: "Mature adoption" }
+
+# Confidence levels (Low is rendered muted/hatched in the heatmap).
+confidence_levels: [High, Medium, Low]
+
+# Scoring methods the processor implements:
+#   proportion : score = modern / (modern + legacy) * 100
+#   presence   : score = (# signal families present / total families) * 100
+#   security   : blends Defender coverage % with misconfiguration density
+#   governance : blends tag coverage %, policy compliance %, MG structure
+#   footprint  : Microsoft vs Third-party publisher split (CONTEXT only, no score-as-opportunity)
+#
+# Narrative templates are deterministic (no AI). Placeholders the processor fills:
+#   {modern_pct} {legacy_pct} {families_present} {families_total}
+#   {coverage_pct} {tag_pct} {compliance_pct} {third_party_pct} {evidence_count}
+
+dimensions:
+  # ---------------------------------------------------------------- Infra
+  - id: infrastructure
+    name: Infrastructure Modernization
+    method: proportion
+    confidence: High
+    opportunity_below: 50
+    modern_types:            # managed / PaaS-capable compute
+      - microsoft.web/serverfarms
+      - microsoft.web/sites
+      - microsoft.app/containerapps
+      - microsoft.containerservice/managedclusters
+      - microsoft.containerinstance/containergroups
+    legacy_types:            # raw IaaS compute (opportunity to modernize)
+      - microsoft.compute/virtualmachines
+      - microsoft.compute/virtualmachinescalesets
+      - microsoft.classiccompute/virtualmachines
+      - microsoft.sqlvirtualmachine/sqlvirtualmachines
+    framework_refs:
+      - { name: "Cloud Adoption Framework", url: "https://learn.microsoft.com/azure/cloud-adoption-framework/" }
+      - { name: "Azure Migrate", url: "https://learn.microsoft.com/azure/migrate/" }
+    narrative:
+      Low:          "Strong IaaS weight ({legacy_pct}% of compute on VMs) — infrastructure modernization opportunity."
+      Intermediate: "Balanced IaaS/PaaS mix ({modern_pct}% managed/PaaS compute)."
+      High:         "Predominantly managed/PaaS compute ({modern_pct}%)."
+
+  # ---------------------------------------------------------------- App
+  - id: application
+    name: Application Modernization
+    method: presence
+    confidence: High
+    opportunity_below: 50
+    families:                # breadth of modern app-platform families
+      app_service:    { types: [microsoft.web/sites], exclude_kind: functionapp }
+      aks:            [microsoft.containerservice/managedclusters]
+      container_apps: [microsoft.app/containerapps, microsoft.app/managedenvironments]
+      functions:      { types: [microsoft.web/sites], kind: functionapp }
+      registry:       [microsoft.containerregistry/registries]
+    framework_refs:
+      - { name: "Azure Kubernetes Service", url: "https://learn.microsoft.com/azure/aks/" }
+      - { name: "Azure Container Apps", url: "https://learn.microsoft.com/azure/container-apps/" }
+      - { name: "Well-Architected Framework", url: "https://learn.microsoft.com/azure/well-architected/" }
+    narrative:
+      Low:          "Limited modern app-platform adoption ({families_present}/{families_total} families) — application modernization opportunity."
+      Intermediate: "Partial modern app-platform adoption ({families_present}/{families_total} families)."
+      High:         "Broad modern app-platform adoption ({families_present}/{families_total} families)."
+
+  # ---------------------------------------------------------------- Database
+  - id: database
+    name: Database Modernization
+    method: proportion
+    confidence: High
+    opportunity_below: 50
+    modern_types:
+      - microsoft.sql/managedinstances
+      - microsoft.sql/servers/databases
+      - microsoft.dbforpostgresql/flexibleservers
+      - microsoft.dbformysql/flexibleservers
+      - microsoft.documentdb/databaseaccounts
+    legacy_types:
+      - microsoft.sqlvirtualmachine/sqlvirtualmachines
+      - microsoft.dbforpostgresql/servers
+      - microsoft.dbformysql/servers
+      - microsoft.dbformariadb/servers
+    framework_refs:
+      - { name: "Azure SQL", url: "https://learn.microsoft.com/azure/azure-sql/" }
+      - { name: "Azure Database for PostgreSQL", url: "https://learn.microsoft.com/azure/postgresql/" }
+    narrative:
+      Low:          "Databases largely on VMs or retiring single-server tiers ({legacy_pct}%) — database modernization opportunity."
+      Intermediate: "Mixed managed and legacy database footprint ({modern_pct}% managed)."
+      High:         "Predominantly managed/PaaS databases ({modern_pct}%)."
+
+  # ---------------------------------------------------------------- Data & Analytics
+  - id: data_platform
+    name: Data Platform & Analytics
+    method: presence
+    confidence: Medium
+    opportunity_below: 40
+    families:
+      fabric:     [microsoft.fabric/capacities]
+      synapse:    [microsoft.synapse/workspaces]
+      databricks: [microsoft.databricks/workspaces]
+      data_lake:  [microsoft.datalakestore/accounts]
+      data_factory: [microsoft.datafactory/factories]
+    framework_refs:
+      - { name: "Microsoft Fabric", url: "https://learn.microsoft.com/fabric/" }
+      - { name: "Azure Synapse Analytics", url: "https://learn.microsoft.com/azure/synapse-analytics/" }
+    narrative:
+      Low:          "Little to no modern data-platform footprint ({families_present}/{families_total}) — data & analytics opportunity."
+      Intermediate: "Emerging data-platform adoption ({families_present}/{families_total} families)."
+      High:         "Established data-platform footprint ({families_present}/{families_total} families)."
+
+  # ---------------------------------------------------------------- AI
+  - id: ai
+    name: AI Readiness & Adoption
+    method: presence
+    confidence: High
+    opportunity_below: 40
+    families:
+      openai_ai_services: [microsoft.cognitiveservices/accounts]
+      machine_learning:   [microsoft.machinelearningservices/workspaces]
+      ai_search:          [microsoft.search/searchservices]
+      bots:               [microsoft.botservice/botservices]
+    framework_refs:
+      - { name: "Azure AI Foundry", url: "https://learn.microsoft.com/azure/ai-foundry/" }
+      - { name: "Azure AI-Ready (Cloud Adoption Framework)", url: "https://learn.microsoft.com/azure/cloud-adoption-framework/scenarios/ai/" }
+    narrative:
+      Low:          "No or minimal AI service adoption ({families_present}/{families_total}) — AI enablement opportunity."
+      Intermediate: "Early AI adoption ({families_present}/{families_total} families)."
+      High:         "Active AI adoption ({families_present}/{families_total} families)."
+
+  # ---------------------------------------------------------------- Automation
+  - id: automation
+    name: Automation & Operations
+    method: presence
+    confidence: Medium
+    opportunity_below: 40
+    families:
+      automation: [microsoft.automation/automationaccounts]
+      logic_apps: [microsoft.logic/workflows]
+      functions:  { types: [microsoft.web/sites], kind: functionapp }
+    framework_refs:
+      - { name: "Azure Automation", url: "https://learn.microsoft.com/azure/automation/" }
+      - { name: "Azure Logic Apps", url: "https://learn.microsoft.com/azure/logic-apps/" }
+    narrative:
+      Low:          "Limited automation footprint ({families_present}/{families_total}) — automation & operations opportunity."
+      Intermediate: "Partial automation adoption ({families_present}/{families_total} families)."
+      High:         "Established automation footprint ({families_present}/{families_total} families)."
+
+  # ---------------------------------------------------------------- Security
+  - id: security
+    name: Security Modernization
+    method: security
+    confidence: High
+    opportunity_below: 60
+    # Uses defender_posture (Standard vs total plans) and misconfig density.
+    signal_types:            # presence adds breadth context (not the score alone)
+      sentinel:  [microsoft.securityinsights/*, microsoft.operationsmanagement/solutions]
+      key_vault: [microsoft.keyvault/vaults]
+      firewall:  [microsoft.network/azurefirewalls]
+    framework_refs:
+      - { name: "Microsoft Defender for Cloud", url: "https://learn.microsoft.com/azure/defender-for-cloud/" }
+      - { name: "WAF – Security pillar", url: "https://learn.microsoft.com/azure/well-architected/security/" }
+    narrative:
+      Low:          "Low Defender coverage ({coverage_pct}%) and/or high misconfiguration density — security modernization opportunity."
+      Intermediate: "Partial security posture (Defender {coverage_pct}%)."
+      High:         "Strong security posture (Defender {coverage_pct}%)."
+
+  # ---------------------------------------------------------------- Governance / LZ
+  - id: governance
+    name: Governance & Landing Zone (CAF/ESLZ)
+    method: governance
+    confidence: Medium
+    opportunity_below: 60
+    # Blends tag coverage %, policy compliance %, and Management Group structure.
+    framework_refs:
+      - { name: "Enterprise-Scale Landing Zone", url: "https://learn.microsoft.com/azure/cloud-adoption-framework/ready/landing-zone/" }
+      - { name: "CAF – Govern", url: "https://learn.microsoft.com/azure/cloud-adoption-framework/govern/" }
+    narrative:
+      Low:          "Low governance signals (tags {tag_pct}%, policy compliance {compliance_pct}%) — landing zone / governance opportunity."
+      Intermediate: "Developing governance (tags {tag_pct}%, compliance {compliance_pct}%)."
+      High:         "Mature governance signals (tags {tag_pct}%, compliance {compliance_pct}%)."
+
+  # ---------------------------------------------------------------- Observability
+  - id: observability
+    name: Observability
+    method: presence
+    confidence: Medium
+    opportunity_below: 40
+    families:
+      log_analytics:   [microsoft.operationalinsights/workspaces]
+      app_insights:    [microsoft.insights/components]
+      monitor_alerts:  [microsoft.insights/metricalerts, microsoft.insights/scheduledqueryrules, microsoft.insights/activitylogalerts]
+      workbooks:       [microsoft.insights/workbooks]
+    framework_refs:
+      - { name: "Azure Monitor", url: "https://learn.microsoft.com/azure/azure-monitor/" }
+      - { name: "WAF – Operational Excellence", url: "https://learn.microsoft.com/azure/well-architected/operational-excellence/" }
+    narrative:
+      Low:          "Sparse observability footprint ({families_present}/{families_total}) — monitoring & observability opportunity."
+      Intermediate: "Partial observability coverage ({families_present}/{families_total} families)."
+      High:         "Broad observability coverage ({families_present}/{families_total} families)."
+
+  # ---------------------------------------------------------------- Footprint (context)
+  - id: footprint
+    name: Azure-Native vs Third-Party Footprint
+    method: footprint
+    confidence: Low
+    context_only: true          # neutral context metric — never framed as an opportunity
+    # Uses the classifier 'publisher' axis (Microsoft vs Third-party). No vendor names.
+    framework_refs:
+      - { name: "Azure Marketplace", url: "https://learn.microsoft.com/marketplace/azure-marketplace-overview" }
+    narrative:
+      context: "{third_party_pct}% of resources are from third-party/Marketplace publishers (context only)."

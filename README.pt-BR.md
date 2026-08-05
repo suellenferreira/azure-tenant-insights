@@ -52,6 +52,7 @@ Todos os dados são obtidos **exclusivamente de APIs oficiais do Azure** — Azu
 - **Mapeamento para pilares WAF** — recomendações do Advisor organizadas por pilar do Well-Architected Framework.
 - **Detecção de misconfiguração baseada em regras** — regras de fontes oficiais mapeadas para princípios Zero Trust.
 - **Conformidade de Policy e detecção de recursos deprecados** — recursos não conformes e correspondências a anúncios oficiais de aposentadoria do Azure.
+- **Avaliação de Modernização & Oportunidade (Cloud)** — *(INFERIDO)* **sinais** de maturidade/adoção por dimensão (Infraestrutura, Aplicação, Banco de Dados, Data Platform, AI, Automação, Segurança, Governança/Landing Zone, Observabilidade) com score 0–100, **confiança** e **evidência**. Mostra indicadores de oportunidade (nunca prescritivo), alinhados a WAF / CAF / ESLZ / AI-Ready / Defender. Aparece como heatmap + cards no relatório Executivo, tabela de evidências no Técnico e aba `ModernizationSignals` no Excel. Config-driven via `config/modernization_signals.yaml`.
 - **Postura do Defender for Cloud** — habilitação de planos por assinatura, cobertura por recurso de servidores e gap de cobertura com custo para proteger.
 - **100% somente leitura** — dados obtidos exclusivamente de APIs oficiais do Azure (Resource Graph, Advisor, Policy Insights, Resource Health e, opcionalmente, Defender e Cost Management).
 
@@ -257,6 +258,7 @@ Os relatórios gerados podem incluir metadados do tenant, IDs de assinatura, nom
 | `Overview` | Resumo de KPIs, principais tipos de recurso, Advisor por pilar WAF, **Resource Origin** (Azure nativo / Híbrido-Arc / Migrate), um resumo de **Service Model** (IaaS/PaaS/SaaS/Hybrid/Supporting) e **Data Collection Notes** |
 | `Index` | Aba de navegação (após `Overview`) com hyperlink para cada aba; cada aba possui um link **↩ Index** de retorno |
 | `Classification` | **Taxonomia** de recursos por tipo — Categoria Técnica, Pilar de Negócio, Service Model, Publisher (Microsoft/Third-party) — com pivôs de resumo (config-driven) |
+| `ModernizationSignals` | *(INFERIDO)* Cloud Modernization & Opportunity — score por dimensão (0–100), nível, confiança, sinal inferido, evidências, indicador de oportunidade e referências de framework |
 | `Subscriptions` | Uma linha por assinatura com contagem de recursos |
 | `AllResources` | Tabela plana de TODOS os recursos em todos os tipos, com uma coluna **Category** (Azure nativo / Híbrido-Arc / Migrate), colunas **Business Pillar** e **Service Model** |
 | `[TipoRecurso]` | Uma aba por tipo de recurso (ex.: `VirtualMachines`) |

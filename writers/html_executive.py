@@ -75,9 +75,11 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
         summary, deprecated, misconfig_findings, defender_data
     )
 
-    # Modernization signals (inferred from resource type presence)
+    # Cloud Modernization & Opportunity (INFERRED) — replaces the old signals list
     resources_by_type = scan_data.get("resources_by_type", {})
-    modern_signals = _detect_modernization_signals(resources_by_type)
+    from processors.modernization import build_modernization_assessment
+    modernization = build_modernization_assessment(scan_data)
+    modernization_html = _build_modernization_exec_html(modernization)
 
     # Regional distribution analysis
     region_summary = _analyze_regions(resources_by_type)
@@ -126,7 +128,7 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
         type_labels=type_labels,
         type_values=type_values,
         strategic_recs=strategic_recs,
-        modern_signals=modern_signals,
+        modernization_html=modernization_html,
         region_summary=region_summary,
         deprecated_count=len(deprecated),
         lz_exec_html=lz_exec_html,
@@ -568,10 +570,132 @@ def _build_zero_trust_executive_html(misconfig_findings: list) -> str:
     )
 
 
+def _build_modernization_exec_html(assessment: dict) -> str:
+    """Executive 'Cloud Modernization & Opportunity' block, in two parts:
+    Part 1 — Current environment (As-Is) charts; Part 2 — Opportunities
+    (readiness gauge + opportunity cards). All INFERRED, evidence-backed."""
+    if not assessment or not assessment.get("available"):
+        return ""
+    import json as _json
+    dims = assessment.get("dimensions", [])
+    summary = assessment.get("summary", {})
+    label = assessment.get("inferred_label", "")
+    asis = summary.get("as_is", {})
+
+    def _band_color(score):
+        if score is None:
+            return "#9AA0A6"
+        if score <= 33:
+            return "#C00000"
+        if score <= 66:
+            return "#C55A11"
+        return "#2E7D32"
+
+    # ---- Part 1 data: Service Model donut + Business Pillar bar ----------
+    sm = asis.get("service_model", {})
+    bp = asis.get("business_pillar", {})
+    sm_items = sorted(sm.get("counts", {}).items(), key=lambda x: -x[1])
+    bp_items = sorted(bp.get("counts", {}).items(), key=lambda x: -x[1])[:8]
+    sm_labels = _json.dumps([k for k, _ in sm_items])
+    sm_values = _json.dumps([v for _, v in sm_items])
+    bp_labels = _json.dumps([k for k, _ in bp_items])
+    bp_values = _json.dumps([v for _, v in bp_items])
+
+    total = asis.get("total_resources", 0)
+    chips = [
+        ("PaaS share", f"{asis.get('paas_pct', 0)}%", "#2E7D32"),
+        ("IaaS share", f"{asis.get('iaas_pct', 0)}%", "#1F4E79"),
+        ("Total resources", f"{total:,}", "#1F4E79"),
+        ("Third-party (context)", f"{asis.get('third_party_pct', 0)}%", "#7F7F7F"),
+    ]
+    chips_html = "".join(
+        f'<div class="mod-chip" style="border-top-color:{c}">'
+        f'<div class="chip-val">{v}</div><div class="chip-lbl">{lbl}</div></div>'
+        for lbl, v, c in chips
+    )
+
+    # ---- Part 2 data: readiness gauge + opportunity cards ---------------
+    readiness = summary.get("readiness")
+    g_color = _band_color(readiness)
+    g_deg = 0 if readiness is None else round(readiness / 100 * 360)
+    g_val = "N/A" if readiness is None else readiness
+    gauge_html = (
+        f'<div class="gauge" style="background:conic-gradient({g_color} {g_deg}deg,#e8edf3 0deg)">'
+        f'<div class="gauge-inner"><div class="gauge-val" style="color:{g_color}">{g_val}</div>'
+        f'<div class="gauge-cap">Modernization<br>Readiness</div></div></div>'
+    )
+
+    dim_by_id = {d["id"]: d for d in dims}
+    cards = ""
+    for o in summary.get("top_opportunities", []):
+        d = dim_by_id.get(o["id"], {})
+        score = o["score"] if o["score"] is not None else 0
+        col = _band_color(o["score"])
+        fw = " · ".join(
+            f'<a href="{f.get("url", "#")}" target="_blank">{f.get("name", "")}</a>'
+            for f in d.get("framework_refs", [])
+        )
+        cards += (
+            f'<div class="opp-card" style="border-left-color:{col}">'
+            f'<h4>{o["name"]}<span class="opp-score" style="color:{col}">{o["score"] if o["score"] is not None else "N/A"}</span></h4>'
+            f'<div class="opp-bar"><span style="width:{score}%;background:{col}"></span></div>'
+            f'<div style="font-size:.84rem;color:#333;margin-top:.4rem">{d.get("narrative", "")}</div>'
+            f'<div class="opp-meta">Confidence: {o["confidence"]}'
+            + (f' &middot; {fw}' if fw else "")
+            + '</div></div>'
+        )
+    cards = cards or '<p class="no-data">No modernization opportunities identified above threshold.</p>'
+
+    qw = summary.get("quick_wins", [])
+    qw_html = ""
+    if qw:
+        names = ", ".join(f'{q["name"]} ({q["score"]})' for q in qw)
+        qw_html = f'<div class="mod-qw">⚡ <strong>Quick wins:</strong> {names}</div>'
+
+    return f"""
+  <div class="section" id="modernization">
+    <h2>🚀 Cloud Modernization Signals &amp; Opportunity
+      <small style="font-size:.72rem;color:#888;font-weight:normal;margin-left:.5rem">(INFERRED — signals from inventory; indicative, not prescriptive)</small>
+    </h2>
+    <p class="mod-narr">{summary.get("narrative", "")}</p>
+
+    <h3 class="mod-h3">1 · Current Environment (As-Is)</h3>
+    <div class="mod-kpis">{chips_html}</div>
+    <div class="two-col">
+      <div><div class="mod-sub">Service Model mix</div><div class="chart-box" style="height:240px"><canvas id="modSvcChart"></canvas></div></div>
+      <div><div class="mod-sub">Resources by business pillar</div><div class="chart-box" style="height:240px"><canvas id="modPillarChart"></canvas></div></div>
+    </div>
+
+    <h3 class="mod-h3">2 · Modernization Opportunities</h3>
+    <div class="mod-legend">
+      <span><i style="background:#C00000"></i>Lower score = higher opportunity (0–33)</span>
+      <span><i style="background:#C55A11"></i>Intermediate (34–66)</span>
+      <span><i style="background:#2E7D32"></i>Mature adoption (67–100)</span>
+    </div>
+    <div class="mod-opps">
+      <div class="mod-gauge-wrap">{gauge_html}
+        <p class="gauge-note">Average of confidently-scored dimensions. Higher is more modern.</p>
+      </div>
+      <div class="opp-grid">{cards}</div>
+    </div>
+    {qw_html}
+    <p style="font-size:.7rem;color:#aaa;margin-top:.8rem">{label}</p>
+  </div>
+  <script>
+  (function(){{
+    if(typeof Chart==='undefined')return;
+    var s=document.getElementById('modSvcChart');
+    if(s)new Chart(s.getContext('2d'),{{type:'doughnut',data:{{labels:{sm_labels},datasets:[{{data:{sm_values},backgroundColor:['#1F4E79','#2E7D32','#2E86AB','#C55A11','#7F7F7F','#9AA0A6'],borderWidth:2,borderColor:'#fff'}}]}},options:{{responsive:true,maintainAspectRatio:false,plugins:{{legend:{{position:'right',labels:{{font:{{size:11}}}}}}}}}}}});
+    var p=document.getElementById('modPillarChart');
+    if(p)new Chart(p.getContext('2d'),{{type:'bar',data:{{labels:{bp_labels},datasets:[{{label:'Count',data:{bp_values},backgroundColor:'#2E86AB',borderRadius:4}}]}},options:{{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{{legend:{{display:false}}}},scales:{{x:{{grid:{{display:false}}}},y:{{grid:{{display:false}}}}}}}}}});
+  }})();
+  </script>"""
+
+
 def _render_html(
     scan_date, tenant_id, tenant_name, subscriptions_list, summary, risk_level, risk_color,
     top_findings, pillar_labels, pillar_values,
-    type_labels, type_values, strategic_recs, modern_signals, region_summary, deprecated_count,
+    type_labels, type_values, strategic_recs, modernization_html, region_summary, deprecated_count,
     lz_exec_html="", defender_exec_html="", defender_posture_exec_html="", zt_exec_html="",
     defender_high=0, defender_total=0,
     warnings_html="",
@@ -601,14 +725,6 @@ def _render_html(
         </div>"""
         for r in strategic_recs
     )
-
-    signals_html = "".join(
-        f"""<div class="signal-item">
-            <span class="signal-count">{s['count']}</span>
-            <span class="signal-msg">{s['message']}</span>
-        </div>"""
-        for s in modern_signals[:8]
-    ) or '<p class="no-data">No specific modernization signals detected.</p>'
 
     dep_alert = (
         f'<div class="alert-critical">⚠ <strong>Deprecated Resources Detected:</strong> '
@@ -655,6 +771,32 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 .signal-item{{display:flex;align-items:center;gap:1rem;padding:.6rem 0;border-bottom:1px solid #eee}}
 .signal-count{{background:#1F4E79;color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.88rem;flex-shrink:0}}
 .signal-msg{{font-size:.88rem;color:#333}}
+.mod-narr{{font-size:.95rem;color:#1a1a2e;background:#eef4fb;border-left:4px solid #2E86AB;padding:.7rem 1rem;border-radius:0 8px 8px 0;margin-bottom:.8rem}}
+.mod-h3{{font-size:1.02rem;color:#1F4E79;margin:1.1rem 0 .6rem;padding-bottom:.35rem;border-bottom:1px dashed #d5e0ec}}
+.mod-sub{{font-size:.8rem;font-weight:600;color:#555;margin-bottom:.3rem}}
+.mod-kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem;margin-bottom:1rem}}
+.mod-chip{{background:#fafcff;border:1px solid #e6eef7;border-top:3px solid #1F4E79;border-radius:10px;padding:.7rem;text-align:center}}
+.mod-chip .chip-val{{font-size:1.5rem;font-weight:800;color:#1F4E79;line-height:1}}
+.mod-chip .chip-lbl{{font-size:.72rem;color:#777;margin-top:.25rem;text-transform:uppercase;letter-spacing:.03em}}
+.mod-legend{{display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.74rem;color:#555;margin:.2rem 0 1rem}}
+.mod-legend span{{display:inline-flex;align-items:center;gap:.35rem}}
+.mod-legend i{{width:12px;height:12px;border-radius:3px;display:inline-block}}
+.mod-opps{{display:grid;grid-template-columns:200px 1fr;gap:1.4rem;align-items:start}}
+.mod-gauge-wrap{{text-align:center}}
+.gauge{{width:170px;height:170px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center}}
+.gauge-inner{{width:120px;height:120px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:inset 0 0 6px rgba(0,0,0,.08)}}
+.gauge-val{{font-size:2.3rem;font-weight:800;line-height:1}}
+.gauge-cap{{font-size:.66rem;color:#777;text-transform:uppercase;letter-spacing:.04em;margin-top:.2rem;line-height:1.15}}
+.gauge-note{{font-size:.68rem;color:#999;margin-top:.5rem;max-width:180px;margin-left:auto;margin-right:auto}}
+.opp-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem}}
+.opp-card{{border:1px solid #e6e0d8;border-left:5px solid #C55A11;border-radius:10px;padding:1rem;background:#fffdfa}}
+.opp-card h4{{color:#1F4E79;font-size:.95rem;margin-bottom:.4rem}}
+.opp-score{{float:right;font-weight:800;font-size:1.1rem}}
+.opp-bar{{background:#eef1f5;border-radius:6px;height:9px;overflow:hidden}}
+.opp-bar span{{display:block;height:100%;border-radius:6px}}
+.opp-meta{{font-size:.75rem;color:#888;margin-top:.5rem}}
+.opp-meta a{{color:#2E86AB;text-decoration:none}}
+.mod-qw{{font-size:.82rem;color:#385723;background:#eef7e6;border-radius:8px;padding:.5rem .8rem;margin-top:.8rem}}
 .alert-critical{{background:#fde8e8;border-left:4px solid #C00000;color:#7b0000;padding:1rem 1.2rem;border-radius:8px;margin:.8rem 0}}
 .no-data{{color:#888;font-style:italic;padding:.5rem 0}}
 .ctrl-bar{{display:flex;gap:.6rem;margin:0 0 1rem;padding:.5rem 0}}
@@ -665,10 +807,37 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 .rec-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}}
 .footer{{text-align:center;padding:2rem;color:#888;font-size:.82rem}}
 .report-badge{{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);padding:.25rem 1rem;border-radius:20px;font-size:.82rem;display:inline-block;margin-top:.5rem}}
-@media(max-width:768px){{.two-col{{grid-template-columns:1fr}}.kpi-grid{{grid-template-columns:repeat(2,1fr)}}}}
+.sidebar{{position:fixed;left:0;top:0;width:220px;height:100vh;background:#1a3a5c;color:#fff;padding:1rem 0;overflow-y:auto;z-index:100}}
+.sidebar h3{{padding:.4rem 1.2rem;font-size:.7rem;text-transform:uppercase;color:#6aa3c8;letter-spacing:.08em;margin-top:.8rem}}
+.sidebar a{{display:block;padding:.45rem 1.2rem;color:#a8c6e0;text-decoration:none;font-size:.84rem;transition:background .2s}}
+.sidebar a:hover{{background:rgba(255,255,255,.1);color:#fff}}
+.sidebar-logo{{padding:1rem 1.2rem;font-weight:700;color:#fff;border-bottom:1px solid rgba(255,255,255,.1)}}
+.main{{margin-left:220px}}
+[id]{{scroll-margin-top:1rem}}
+@media(max-width:900px){{.sidebar{{display:none}}.main{{margin-left:0}}}}
+@media(max-width:768px){{.two-col{{grid-template-columns:1fr}}.kpi-grid{{grid-template-columns:repeat(2,1fr)}}.mod-opps{{grid-template-columns:1fr}}}}
 </style>
 </head>
 <body>
+<nav class="sidebar">
+  <div class="sidebar-logo">📊 ATI Executive</div>
+  <h3>Overview</h3>
+  <a href="#overview">📈 Key Metrics</a>
+  <a href="#charts">📊 Charts</a>
+  <a href="#regions">🌍 Regions</a>
+  <h3>Modernization</h3>
+  <a href="#modernization">🚀 Modernization Signals</a>
+  <h3>Infrastructure</h3>
+  <a href="#landing-zone">🏗 Landing Zone</a>
+  <h3>Priorities</h3>
+  <a href="#findings">⚠ Priority Findings</a>
+  <a href="#recommendations">➤ Recommendations</a>
+  <h3>Security</h3>
+  <a href="#defender-posture">🛡 Defender Posture</a>
+  <a href="#defender">🔒 Defender Summary</a>
+  <a href="#zerotrust">🛡 Zero Trust</a>
+</nav>
+<div class="main">
 <div class="header">
   <h1>Azure Tenant Insights</h1>
   <div class="sub">Executive Summary Report</div>
@@ -686,7 +855,7 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
   {dep_alert}
   <div class="risk-banner">Overall Environment Risk Level: {risk_level}</div>
 
-  <div class="kpi-grid">
+  <div class="kpi-grid" id="overview">
     <div class="kpi-card"><div class="kpi-val">{kpi.get('total_resources',0):,}</div><div class="kpi-lbl">Total Resources</div></div>
     <div class="kpi-card"><div class="kpi-val">{kpi.get('total_subscriptions',0)}</div><div class="kpi-lbl">Subscriptions</div></div>
     <div class="kpi-card"><div class="kpi-val">{kpi.get('total_resource_types',0)}</div><div class="kpi-lbl">Resource Types</div></div>
@@ -699,16 +868,16 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
     <div class="kpi-card {'warn' if defender_total>0 else 'ok'}"><div class="kpi-val">{defender_total}</div><div class="kpi-lbl">Defender Findings</div></div>
   </div>
 
-  <div class="two-col">
+  <div class="two-col" id="charts">
     <div class="section"><h2>Advisor Recommendations by WAF Pillar</h2><div class="chart-box"><canvas id="pillarChart"></canvas></div></div>
     <div class="section"><h2>Top Resource Types</h2><div class="chart-box"><canvas id="typeChart"></canvas></div></div>
   </div>
 
-  <div class="section"><h2>🌍 Active Regions Distribution</h2><div class="chart-box" style="height:250px"><canvas id="regionChart"></canvas></div></div>
+  <div class="section" id="regions"><h2>🌍 Active Regions Distribution</h2><div class="chart-box" style="height:250px"><canvas id="regionChart"></canvas></div></div>
 
-  <div class="section"><h2>Top Priority Findings</h2>{findings_html}</div>
-  <div class="section"><h2>Strategic Recommendations</h2><div class="rec-grid">{recs_html}</div></div>
-  <div class="section">
+  {modernization_html}
+
+  <div class="section" id="landing-zone">
     <h2>🏗 Landing Zone Observations
       <small style="font-size:.72rem;color:#888;font-weight:normal;margin-left:.5rem">(Condensed — top action items. See Technical Report for full analysis.)</small>
     </h2>
@@ -716,30 +885,26 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
     {lz_exec_html}
   </div>
 
-  <div class="section">
-    <h2>� Defender for Cloud — Plan Posture</h2>
+  <div class="section" id="findings"><h2>Top Priority Findings</h2>{findings_html}</div>
+  <div class="section" id="recommendations"><h2>Strategic Recommendations</h2><div class="rec-grid">{recs_html}</div></div>
+
+  <div class="section" id="defender-posture">
+    <h2>🛡 Defender for Cloud — Plan Posture</h2>
     <p style="font-size:.82rem;color:#666;margin-bottom:.8rem">Defender plan enablement per subscription (<strong>Microsoft.Security/pricings</strong>). VMs / VMSS / Arc are evaluated per-resource; other workloads at subscription scope. Requires only <strong>Reader</strong> RBAC.</p>
     {defender_posture_exec_html}
   </div>
 
-  <div class="section">
-    <h2>�🔒 Defender for Cloud — Executive Summary</h2>
+  <div class="section" id="defender">
+    <h2>🔒 Defender for Cloud — Executive Summary</h2>
     <p style="font-size:.82rem;color:#666;margin-bottom:.8rem">Microsoft Defender for Cloud security posture. Requires <strong>Security Reader</strong> RBAC on SecurityResources.</p>
     {defender_exec_html}
   </div>
 
-    <div class="section">
+    <div class="section" id="zerotrust">
         <h2>🛡 Zero Trust Security Posture — Executive Summary</h2>
         <p style="font-size:.82rem;color:#666;margin-bottom:.8rem">Findings grouped by Zero Trust principles: Verify Explicitly, Use Least Privilege, and Assume Breach.</p>
         {zt_exec_html}
     </div>
-
-  <div class="section">
-    <h2>Technology & Modernization Signals
-      <small style="font-size:.72rem;color:#888;font-weight:normal;margin-left:.5rem">(Inferred from resource types detected — not an authoritative API signal)</small>
-    </h2>
-    {signals_html}
-  </div>
 </div>
 <div class="footer">
   Azure Tenant Insights v1.0.0 &mdash; Executive Report &mdash; {scan_date}<br>
@@ -754,6 +919,7 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
     <li><a href="https://learn.microsoft.com/en-us/azure/well-architected/" target="_blank" style="color:#aaa;">Azure Well-Architected Framework — Microsoft Learn</a></li>
     <li><a href="https://learn.microsoft.com/en-us/azure/defender-for-cloud/defender-for-cloud-introduction" target="_blank" style="color:#aaa;">Microsoft Defender for Cloud — Microsoft Learn</a></li>
   </ul>
+</div>
 </div>
 <script>
 const pillarCtx=document.getElementById('pillarChart')?.getContext('2d');

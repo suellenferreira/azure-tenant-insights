@@ -19,11 +19,15 @@ import logging
 from collections import Counter
 from typing import Any, Dict, List
 
+from writers.safety import html_safe_data
+
 logger = logging.getLogger(__name__)
 
 
 def write_executive_report(scan_data: dict, output_path: str) -> None:
     """Generates the Executive HTML report and writes to output_path."""
+    # Azure resource names, tags, and recommendation text are external input.
+    scan_data = html_safe_data(scan_data)
     meta = scan_data.get("metadata", {})
     summary = scan_data.get("summary_metrics", {})
     advisor_data = scan_data.get("advisor_data", [])

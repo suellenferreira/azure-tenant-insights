@@ -163,14 +163,19 @@ pip install -r requirements.txt
 # Autenticar via Azure CLI
 az login
 
-# Executar o ATI contra todas as assinaturas acessíveis
-python invoke_ati.py
+# Primeira execução recomendada: restringir a uma assinatura
+python invoke_ati.py --subscription-id <SUBSCRIPTION-ID>
 
-# Executar para um tenant específico
-python invoke_ati.py --tenant-id 00000000-0000-0000-0000-000000000000
+# Opcional: escanear todas as assinaturas acessíveis (confirmação interativa obrigatória)
+python invoke_ati.py --tenant-id <TENANT-ID>
+
+# Executar para um tenant e assinatura específicos
+python invoke_ati.py --tenant-id <TENANT-ID> --subscription-id <SUBSCRIPTION-ID>
 ```
 
 Os arquivos de saída são salvos em `./AzureTenantInsights/` por padrão.
+
+> **Tratamento de dados:** os relatórios gerados contêm dados do tenant, assinaturas, inventário de recursos, postura e possivelmente custos. Trate-os como artefatos operacionais sensíveis; não faça commit, publique nem compartilhe fora de um armazenamento aprovado.
 
 ---
 
@@ -179,7 +184,7 @@ Os arquivos de saída são salvos em `./AzureTenantInsights/` por padrão.
 ### Exemplos Básicos
 
 ```bash
-# Scan completo do tenant (todas as assinaturas acessíveis)
+# Scan completo do tenant (todas as assinaturas acessíveis; confirmação interativa obrigatória)
 python invoke_ati.py --tenant-id <TENANT-ID>
 
 # Restringir a assinaturas específicas

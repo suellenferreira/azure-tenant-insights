@@ -63,8 +63,8 @@ SHEET_WARN_HARD = _env_int("ATI_SHEET_WARN_HARD", 200)
 
 # Fixed sheet names — reserved so type sheets never collide with them.
 RESERVED_SHEET_NAMES = {
-    "Overview", "Index", "Classification", "Subscriptions", "AllResources",
-    "AdvisorFindings", "PolicyCompliance", "ResourceHealth",
+    "Overview", "Index", "Classification", "ModernizationSignals", "Subscriptions",
+    "AllResources", "AdvisorFindings", "PolicyCompliance", "ResourceHealth",
     "DeprecatedResources", "MisconfigFindings", "SecurityAssessments",
     "DefenderCostEstimate", "DefenderPosture", "DefenderServersCoverage",
     "DefenderCoverageGap", "Costs",
@@ -104,6 +104,7 @@ def write_excel(scan_data: dict, output_path: str) -> None:
 
     _write_overview_sheet(wb, scan_data)
     _write_classification_sheet(wb, scan_data, sheet_map)
+    _write_modernization_sheet(wb, scan_data)
     _write_subscriptions_sheet(wb, scan_data)
     _write_all_resources_sheet(wb, scan_data, include_tags, sheet_map)
     _write_resource_type_sheets(wb, scan_data, include_tags, sheet_map)
@@ -304,8 +305,9 @@ def _build_sheet_name_map(sorted_types, inventory_config, budget, reserved_names
 
 def _reserved_sheet_count(scan_data: dict) -> int:
     """Number of fixed (non-type) sheets that will be created for this scan."""
-    count = 10  # Overview, Index, Classification, Subscriptions, AllResources,
-    #             Advisor, Policy, Health, Deprecated, Misconfig
+    count = 11  # Overview, Index, Classification, ModernizationSignals,
+    #             Subscriptions, AllResources, Advisor, Policy, Health,
+    #             Deprecated, Misconfig
     if scan_data.get("defender_data"):
         count += 2  # SecurityAssessments + DefenderCostEstimate
     if scan_data.get("defender_posture"):
@@ -434,7 +436,7 @@ def _write_overview_sheet(wb, scan_data: dict):
     summary = scan_data.get("summary_metrics", {})
 
     # Dark theme header bar
-    ws.merge_cells("A1:H1")
+    ws.merge_cells("A1:P1")
     title_cell = ws["A1"]
     title_cell.value = "Azure Tenant Insights — Environment Overview"
     title_cell.font = Font(bold=True, size=18, color="FFFFFF")
@@ -607,8 +609,8 @@ def _write_overview_sheet(wb, scan_data: dict):
 
         _pie = PieChart()
         _pie.title = "Service Model Distribution"
-        _pie.height = 6.0
-        _pie.width = 8.5
+        _pie.height = 8.5
+        _pie.width = 12.0
         _pie.style = 10
         _pdata = _SMRef(ws, min_col=5, min_row=16, max_row=15 + _sm_n)
         _pcats = _SMRef(ws, min_col=4, min_row=16, max_row=15 + _sm_n)
@@ -673,7 +675,128 @@ def _write_overview_sheet(wb, scan_data: dict):
             right=Side(style="thin", color="D3D3D3"),
         )
 
-    _col_widths(ws, [28, 18, 16, 32, 14, 4, 28, 14])
+    # Section 3c/3d: Modernization Signals + Defender Posture (top-right,
+    # in the empty columns J+, aligned with the KPI band — no chart overlap).
+    _thin = Border(
+        left=Side(style="thin", color="D3D3D3"),
+        right=Side(style="thin", color="D3D3D3"),
+        top=Side(style="thin", color="D3D3D3"),
+        bottom=Side(style="thin", color="D3D3D3"),
+    )
+
+    def _mband(_s):
+        if _s is None:
+            return "9AA0A6"
+        if _s <= 33:
+            return "C00000"
+        if _s <= 66:
+            return "C55A11"
+        return "2E7D32"
+
+    def _kv(row, lcol, label, value, fill, *, white=False, span_value=0):
+        _lc = ws.cell(row=row, column=lcol)
+        _lc.value = label
+        _lc.font = Font(bold=True, size=10)
+        _lc.fill = PatternFill("solid", fgColor="F5F5F5")
+        _lc.alignment = Alignment(horizontal="left", vertical="center")
+        _vc = ws.cell(row=row, column=lcol + 1)
+        _vc.value = value
+        _vc.fill = PatternFill("solid", fgColor=fill)
+        _vc.font = Font(bold=True, size=10, color="FFFFFF" if white else "000000")
+        _vc.alignment = Alignment(horizontal="center", vertical="center")
+        _vc.border = _thin
+        if span_value:
+            ws.merge_cells(start_row=row, start_column=lcol + 1,
+                           end_row=row, end_column=lcol + 1 + span_value)
+        ws.row_dimensions[row].height = 18
+
+    # --- MODERNIZATION SIGNALS (cols J:K) ---
+    from processors.modernization import build_modernization_assessment
+    _mod = build_modernization_assessment(scan_data)
+    ws.merge_cells("J4:K4")
+    ws["J4"].value = "MODERNIZATION SIGNALS"
+    ws["J4"].fill = section_header_fill
+    ws["J4"].font = section_header_font
+    ws["J4"].alignment = Alignment(horizontal="center", vertical="center")
+    if _mod.get("available"):
+        _ms = _mod.get("summary", {})
+        _readiness = _ms.get("readiness")
+        _kv(5, 10, "Readiness (0-100)",
+            "N/A" if _readiness is None else _readiness, _mband(_readiness), white=True)
+        _kv(6, 10, "IaaS Share", f"{_ms.get('iaas_pct', 0)}%", "D6E4F0")
+        _kv(7, 10, "PaaS Share", f"{_ms.get('paas_pct', 0)}%", "E2EFDA")
+        ws.merge_cells("J8:K8")
+        ws["J8"].value = "TOP OPPORTUNITIES"
+        ws["J8"].fill = PatternFill("solid", fgColor="1F4E79")
+        ws["J8"].font = Font(bold=True, size=9, color="FFFFFF")
+        ws["J8"].alignment = Alignment(horizontal="center", vertical="center")
+        _tops = _ms.get("top_opportunities", [])[:3]
+        for _i, _o in enumerate(_tops):
+            _kv(9 + _i, 10, _o["name"],
+                "N/A" if _o["score"] is None else _o["score"], _mband(_o["score"]), white=True)
+        _note_row = 9 + max(len(_tops), 1)
+        ws.merge_cells(start_row=_note_row, start_column=10, end_row=_note_row, end_column=11)
+        ws.cell(row=_note_row, column=10).value = "INFERRED — indicative only"
+        ws.cell(row=_note_row, column=10).font = Font(size=8, italic=True, color="888888")
+    else:
+        ws.merge_cells("J5:K5")
+        ws["J5"].value = "Not available"
+        ws["J5"].font = Font(size=9, italic=True, color="888888")
+
+    # --- DEFENDER FOR CLOUD — PLAN POSTURE (cols M:P) ---
+    _posture = scan_data.get("defender_posture", []) or []
+    ws.merge_cells("M4:P4")
+    ws["M4"].value = "DEFENDER FOR CLOUD — PLAN POSTURE"
+    ws["M4"].fill = section_header_fill
+    ws["M4"].font = section_header_font
+    ws["M4"].alignment = Alignment(horizontal="center", vertical="center")
+    if _posture:
+        _enabled = sum(1 for p in _posture if p.get("enabled"))
+        _total_plans = len(_posture)
+        _free = _total_plans - _enabled
+        try:
+            from collectors.defender_posture import build_servers_resource_coverage
+            _srv = build_servers_resource_coverage(_posture, scan_data.get("resources_by_type", {}))
+            _srv_total = len(_srv)
+            _srv_cov = sum(1 for r in _srv if r.get("covered"))
+        except Exception:
+            _srv_total = _srv_cov = 0
+        _srv_unc = _srv_total - _srv_cov
+        _kv(5, 13, "Plans Enabled", f"{_enabled}/{_total_plans}", "E2EFDA", span_value=2)
+        _kv(6, 13, "Plans Off", _free, "FCE4D6" if _free else "E2EFDA", span_value=2)
+        _kv(7, 13, "Servers Covered", f"{_srv_cov}/{_srv_total}",
+            "F8D7DA" if _srv_unc else "E2EFDA", span_value=2)
+        _kv(8, 13, "Not Covered", _srv_unc, "F8D7DA" if _srv_unc else "E2EFDA", span_value=2)
+        try:
+            from collectors.defender_pricing import compute_coverage_gap, total_gap_monthly_cost
+            _gap = compute_coverage_gap(scan_data.get("resources_by_type", {}), _posture)
+            _gap_units = sum(r["total_units"] for r in _gap)
+            _gap_unprot = sum(r["unprotected_units"] for r in _gap)
+            _gap_cost = total_gap_monthly_cost(_gap)
+            _kv(9, 13, "Coverage Gap (est.)", f"${_gap_cost:,.2f}/mo",
+                "FCE4D6" if _gap_cost else "E2EFDA", span_value=2)
+            _kv(10, 13, "Units Unprotected", f"{_gap_unprot:,}/{_gap_units:,}", "F5F5F5", span_value=2)
+        except Exception:
+            pass
+        _disabled = sorted({p.get("planDisplayName", "") for p in _posture if not p.get("enabled")})
+        ws.cell(row=11, column=13).value = "Disabled Plans"
+        ws.cell(row=11, column=13).font = Font(bold=True, size=10)
+        ws.cell(row=11, column=13).fill = PatternFill("solid", fgColor="F5F5F5")
+        ws.merge_cells(start_row=11, start_column=14, end_row=11, end_column=16)
+        _dc = ws.cell(row=11, column=14)
+        _dc.value = ", ".join(_disabled[:8]) or "None"
+        _dc.font = Font(size=9, color="555555")
+        _dc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        ws.row_dimensions[11].height = 28
+    else:
+        ws.merge_cells("M5:P5")
+        ws["M5"].value = "Plan posture not available — requires Reader RBAC (Microsoft.Security/pricings/read)."
+        ws["M5"].font = Font(size=9, italic=True, color="888888")
+        ws["M5"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    _col_widths(ws, [28, 18, 16, 32, 14, 4, 28, 14,
+                     3, 30, 13, 3, 26, 15, 13, 13])
+
 
     # Section 3b: Business Pillar summary (ALL pillars) + horizontal bar chart
     _pil_counts: Dict[str, int] = {}
@@ -683,7 +806,7 @@ def _write_overview_sheet(wb, scan_data: dict):
     _pil_sorted = sorted(_pil_counts.items(), key=lambda x: -x[1])
     _pil_n = len(_pil_sorted)
 
-    _pil_header_row = 27
+    _pil_header_row = 33
     ws.merge_cells(f"A{_pil_header_row}:H{_pil_header_row}")
     ws[f"A{_pil_header_row}"].value = "BUSINESS PILLAR \u2014 ALL"
     ws[f"A{_pil_header_row}"].fill = section_header_fill
@@ -984,6 +1107,194 @@ def _write_classification_sheet(wb, scan_data: dict, sheet_map: Dict[str, str]):
         rr += 1
 
     _col_widths(ws, [46, 28, 20, 20, 14, 10, 30])
+
+
+def _mod_evidence_text(d: dict) -> str:
+    ev = d.get("evidence", {}) or {}
+    m = d.get("method")
+    if m == "proportion":
+        return f"modern={ev.get('modern', 0)}, legacy={ev.get('legacy', 0)}, total={ev.get('total', 0)}"
+    if m == "presence":
+        fams = ev.get("families", {}) or {}
+        present = [f"{k}={v}" for k, v in fams.items() if v]
+        base = f"{ev.get('present', 0)}/{ev.get('total', 0)} families"
+        return base + (": " + ", ".join(present) if present else "")
+    if m == "security":
+        cov = ev.get("defender_coverage_pct")
+        return f"Defender {cov if cov is not None else 'n/a'}% · High misconfig {ev.get('high_misconfig', 0)}"
+    if m == "governance":
+        return (f"tags {ev.get('tag_pct')}% · compliance {ev.get('compliance_pct')}% · "
+                f"MGs {ev.get('mg_count', 0)}")
+    if m == "footprint":
+        return (f"Microsoft {ev.get('microsoft', 0)} · Third-party {ev.get('third_party', 0)} "
+                f"({ev.get('third_party_pct', 0)}%)")
+    return ""
+
+
+def _write_modernization_sheet(wb, scan_data: dict):
+    """Cloud Modernization & Opportunity — per-dimension inferred maturity/adoption
+    scores (0-100) with confidence, evidence, and deterministic narrative."""
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from processors.modernization import build_modernization_assessment
+
+    a = build_modernization_assessment(scan_data)
+    if not a.get("available"):
+        return
+
+    ws = wb.create_sheet("ModernizationSignals")
+    ws.sheet_view.showGridLines = False
+
+    ws.merge_cells("A1:H1")
+    title = ws["A1"]
+    title.value = "Cloud Modernization & Opportunity — Signals (INFERRED)"
+    title.font = Font(bold=True, size=16, color="FFFFFF")
+    title.fill = PatternFill("solid", fgColor=COLOR_HEADER_BG)
+    title.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[1].height = 30
+
+    ws["A2"] = a.get("inferred_label", "")
+    ws["A2"].font = Font(size=9, italic=True, color="888888")
+    summary = a.get("summary", {})
+    ws["A3"] = summary.get("narrative", "")
+    ws["A3"].font = Font(size=10, bold=True, color="1F4E79")
+    ws.merge_cells("A3:H3")
+    ws.row_dimensions[3].height = 28
+    ws["A3"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    # ---- Part 1: Current environment (As-Is) mini-tables ------------------
+    section_fill = PatternFill("solid", fgColor="1F4E79")
+    section_font = Font(bold=True, size=11, color="FFFFFF")
+    asis = summary.get("as_is", {})
+    sm = asis.get("service_model", {})
+    bp = asis.get("business_pillar", {})
+    sm_counts, sm_pct = sm.get("counts", {}), sm.get("pct", {})
+    bp_counts, bp_pct = bp.get("counts", {}), bp.get("pct", {})
+
+    ws.merge_cells("A5:C5")
+    ws["A5"].value = "CURRENT ENVIRONMENT — BY SERVICE MODEL"
+    ws["A5"].fill = section_fill
+    ws["A5"].font = section_font
+    ws["A5"].alignment = Alignment(horizontal="center")
+    ws.merge_cells("E5:G5")
+    ws["E5"].value = "BY BUSINESS PILLAR"
+    ws["E5"].fill = section_fill
+    ws["E5"].font = section_font
+    ws["E5"].alignment = Alignment(horizontal="center")
+
+    def _asis_rows(col0, counts, pct):
+        r = 6
+        for label, cnt in sorted(counts.items(), key=lambda x: -x[1]):
+            lc = ws.cell(row=r, column=col0)
+            lc.value = label
+            lc.font = Font(bold=True, size=10)
+            lc.fill = PatternFill("solid", fgColor="F5F5F5")
+            vc = ws.cell(row=r, column=col0 + 1)
+            vc.value = cnt
+            vc.fill = PatternFill("solid", fgColor="D6E4F0")
+            vc.alignment = Alignment(horizontal="center")
+            vc.font = Font(bold=True, size=10)
+            pc = ws.cell(row=r, column=col0 + 2)
+            pc.value = f"{pct.get(label, 0)}%"
+            pc.fill = PatternFill("solid", fgColor="EAF1FB")
+            pc.alignment = Alignment(horizontal="center")
+            pc.font = Font(size=10, color="1F4E79")
+            r += 1
+        return r
+
+    end_sm = _asis_rows(1, sm_counts, sm_pct)
+    end_bp = _asis_rows(5, bp_counts, bp_pct)
+    ctx_row = max(end_sm, end_bp)
+    ws.cell(row=ctx_row, column=1).value = (
+        f"Context: {asis.get('third_party_pct', 0)}% of resources are third-party / Marketplace "
+        f"publishers (neutral — informational only)."
+    )
+    ws.cell(row=ctx_row, column=1).font = Font(size=9, italic=True, color="888888")
+    ws.merge_cells(start_row=ctx_row, start_column=1, end_row=ctx_row, end_column=8)
+
+    header_row = ctx_row + 2
+    headers = ["Dimension", "Score", "Level", "Confidence", "Opportunity",
+               "Signal (inferred)", "Evidence", "Frameworks"]
+    ws.cell(row=header_row - 1, column=1).value = "MODERNIZATION SIGNALS BY DIMENSION"
+    ws.cell(row=header_row - 1, column=1).font = section_font
+    ws.cell(row=header_row - 1, column=1).fill = section_fill
+    ws.merge_cells(start_row=header_row - 1, start_column=1, end_row=header_row - 1, end_column=8)
+    ws.cell(row=header_row - 1, column=1).alignment = Alignment(horizontal="center")
+    for c, h in enumerate(headers, 1):
+        ws.cell(row=header_row, column=c).value = h
+    _header_style(ws, header_row, len(headers))
+    _auto_filter(ws, header_row, len(headers))
+    _freeze(ws, header_row + 1)
+
+    rr = header_row + 1
+    for d in a.get("dimensions", []):
+        ws.cell(row=rr, column=1).value = d["name"]
+        ws.cell(row=rr, column=1).font = Font(bold=True, size=10)
+
+        score_cell = ws.cell(row=rr, column=2)
+        score_cell.value = "N/A" if d["score"] is None else d["score"]
+        score_cell.alignment = Alignment(horizontal="center")
+        score_cell.font = Font(bold=True, color="FFFFFF")
+        score_cell.fill = PatternFill("solid", fgColor=(d.get("color") or "#9AA0A6").lstrip("#"))
+
+        ws.cell(row=rr, column=3).value = d["level"]
+        conf_cell = ws.cell(row=rr, column=4)
+        conf_cell.value = d["confidence"]
+        if d["confidence"] == "Low":
+            conf_cell.font = Font(color="999999", italic=True)
+        ws.cell(row=rr, column=5).value = "YES" if d["opportunity"] else "—"
+        if d["opportunity"]:
+            ws.cell(row=rr, column=5).font = Font(bold=True, color="C00000")
+        ws.cell(row=rr, column=6).value = d["narrative"]
+        ws.cell(row=rr, column=7).value = _mod_evidence_text(d)
+        ws.cell(row=rr, column=8).value = "; ".join(
+            f.get("name", "") for f in d.get("framework_refs", []))
+        rr += 1
+
+    # Top opportunities recap
+    tops = summary.get("top_opportunities", [])
+    if tops:
+        rr += 1
+        ws.cell(row=rr, column=1).value = "TOP OPPORTUNITIES"
+        ws.cell(row=rr, column=1).font = Font(bold=True, size=11, color="FFFFFF")
+        ws.cell(row=rr, column=1).fill = PatternFill("solid", fgColor="1F4E79")
+        rr += 1
+        for o in tops:
+            ws.cell(row=rr, column=1).value = o["name"]
+            ws.cell(row=rr, column=2).value = o["score"]
+            ws.cell(row=rr, column=2).alignment = Alignment(horizontal="center")
+            ws.cell(row=rr, column=3).value = f"confidence: {o['confidence']}"
+            rr += 1
+
+    # ---- Legend / how to read -------------------------------------------
+    rr += 1
+    ws.cell(row=rr, column=1).value = "HOW TO READ"
+    ws.cell(row=rr, column=1).font = Font(bold=True, size=11, color="FFFFFF")
+    ws.cell(row=rr, column=1).fill = section_fill
+    ws.merge_cells(start_row=rr, start_column=1, end_row=rr, end_column=8)
+    ws.cell(row=rr, column=1).alignment = Alignment(horizontal="center")
+    rr += 1
+    legend = [
+        ("Score 0–33", "High opportunity", "C00000"),
+        ("Score 34–66", "Intermediate", "C55A11"),
+        ("Score 67–100", "Mature adoption", "2E7D32"),
+        ("Confidence", "High / Medium / Low — Low = weak or partial evidence (read as directional)", None),
+        ("Opportunity = YES", "score is below this dimension's modernization threshold", None),
+        ("Adoption breadth", "presence dimensions measure how many service families exist, not depth/volume", None),
+        ("Context rows", "neutral, informational signals (e.g. footprint) — not an opportunity", None),
+    ]
+    for label, desc, color in legend:
+        lc = ws.cell(row=rr, column=1)
+        lc.value = label
+        lc.font = Font(bold=True, size=10, color="FFFFFF" if color else "1F4E79")
+        if color:
+            lc.fill = PatternFill("solid", fgColor=color)
+        dc = ws.cell(row=rr, column=2)
+        dc.value = desc
+        dc.font = Font(size=9, color="555555")
+        ws.merge_cells(start_row=rr, start_column=2, end_row=rr, end_column=8)
+        rr += 1
+
+    _col_widths(ws, [34, 10, 14, 12, 12, 58, 46, 44])
 
 
 def _write_subscriptions_sheet(wb, scan_data: dict):

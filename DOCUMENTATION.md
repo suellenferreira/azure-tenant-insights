@@ -1,6 +1,6 @@
 # Azure Tenant Insights — Enhanced Features Documentation
 
-> **Version 3.0** — Items 0-10 Implementation  
+> **Version 3.1** — Items 0-11 Implementation  
 > Last Updated: August 4, 2026  
 > This document complements README.md with detailed methodologies and data sources.
 
@@ -19,6 +19,7 @@
 - [Item 8: Excel Navigation & Report UX Enhancements](#item-8-excel-navigation--report-ux-enhancements)
 - [Item 9: Resource Classification Taxonomy](#item-9-resource-classification-taxonomy)
 - [Item 10: Architecture Diagrams (draw.io)](#item-10-architecture-diagrams-drawio)
+- [Item 11: Cloud Modernization & Opportunity Assessment](#item-11-cloud-modernization--opportunity-assessment)
 - [Data Sources & References](#data-sources--references)
 
 ---
@@ -588,6 +589,34 @@ Open the `.drawio` file in the draw.io web/desktop app or the VS Code draw.io ex
 
 ---
 
+## Item 11: Cloud Modernization & Opportunity Assessment
+
+### What It Does
+Evolves the assessment from an *inventory* view into a *maturity & opportunity* view. Ten dimensions are scored 0-100 (INFERRED) with a level, a confidence, an inferred signal, supporting evidence, and an opportunity indicator — aligned to WAF / CAF / ESLZ / AI-Ready / Defender.
+
+### Dimensions
+Infrastructure Modernization, Application Modernization, Database Modernization, Data Platform & Analytics, AI Readiness & Adoption, Automation & Operations, Security Modernization, Governance & Landing Zone (CAF/ESLZ), Observability, and a neutral **Azure-Native vs Third-Party Footprint** (context only — no vendor names, never framed as an opportunity).
+
+### Scoring methods (`processors/modernization.py`, driven by `config/modernization_signals.yaml`)
+- **proportion** — `modern / (modern + legacy) * 100` (e.g. PaaS vs IaaS compute; managed DB vs SQL-on-VM).
+- **presence** — `(# signal families present / total families) * 100` (breadth, avoids big-tenant bias).
+- **security** — Defender coverage % blended with misconfiguration density.
+- **governance** — tag coverage %, policy compliance %, and Management Group structure.
+- **footprint** — Microsoft vs Third-party publisher split (context only).
+
+### Guardrails
+Non-prescriptive by design: it surfaces *signals* and *opportunity indicators*, never deterministic recommendations. Every dimension carries a confidence and evidence; low-confidence signals are visually muted. Narrative is deterministic (no AI). All framework references are links only.
+
+### Where It Appears
+- **Executive report**: heatmap of dimension tiles + top-opportunity cards + narrative (before *Top Priority Findings*).
+- **Technical report**: evidence table (score, confidence, method, signal, supporting evidence, opportunity, frameworks) before *WAF Findings*.
+- **Excel**: `ModernizationSignals` sheet.
+
+### Limitations
+⚠️ INFERRED — no official Microsoft API returns modernization scores. Signals are indicative; validate against your architecture and standards.
+
+---
+
 ## Data Sources & References
 
 ### Primary Azure APIs
@@ -681,6 +710,6 @@ Before deploying in production, validate:
 
 ---
 
-**Document Version**: 3.0  
+**Document Version**: 3.1  
 **Last Updated**: August 4, 2026  
-**Status**: ✅ Complete — Items 0-10 implemented and documented (including draw.io architecture diagrams)
+**Status**: ✅ Complete — Items 0-11 implemented and documented (diagrams + modernization assessment)

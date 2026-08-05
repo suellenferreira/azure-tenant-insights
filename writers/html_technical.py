@@ -140,8 +140,10 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
             {arc_summary_table}
             {arc_rows}</div>"""
 
-    # Item 0: Modernization Signals (same as executive report)
-    modern_signals = _detect_modernization_signals(resources_by_type)
+    # Cloud Modernization & Opportunity (INFERRED) — detailed evidence view
+    from processors.modernization import build_modernization_assessment
+    modernization = build_modernization_assessment(scan_data)
+    modernization_detail_html = _build_modernization_tech_html(modernization)
 
     # Item 3: Regional distribution analysis
     region_summary = _analyze_regions(resources_by_type)
@@ -177,7 +179,7 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
         health_html=health_html, deprecated_html=deprecated_html,
         lz_html=lz_html, defender_section=defender_section,
         zerotrust_html=zerotrust_html,
-        arc_section=arc_section, modern_signals=modern_signals,
+        arc_section=arc_section, modernization_detail_html=modernization_detail_html,
         region_summary=region_summary,
         sub_labels=sub_labels, sub_values=sub_values,
         sev_labels=sev_labels, sev_values=sev_values,
@@ -1343,11 +1345,280 @@ def _build_defender_section_html(defender_data: list, resources_by_type: dict) -
 # HTML renderer
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _mod_evidence_detail(d: dict) -> str:
+    ev = d.get("evidence", {}) or {}
+    m = d.get("method")
+    if m == "proportion":
+        return (f"modern={ev.get('modern', 0)}, legacy={ev.get('legacy', 0)}, "
+                f"total={ev.get('total', 0)}")
+    if m == "presence":
+        fams = ev.get("families", {}) or {}
+        present = ", ".join(f"{k}={v}" for k, v in fams.items() if v) or "none"
+        return f"{ev.get('present', 0)}/{ev.get('total', 0)} families present ({present})"
+    if m == "security":
+        cov = ev.get("defender_coverage_pct")
+        return (f"Defender coverage {cov if cov is not None else 'n/a'}% · "
+                f"High misconfig {ev.get('high_misconfig', 0)}")
+    if m == "governance":
+        return (f"tags {ev.get('tag_pct')}% · policy compliance {ev.get('compliance_pct')}% · "
+                f"Management Groups {ev.get('mg_count', 0)}")
+    if m == "footprint":
+        return (f"Microsoft {ev.get('microsoft', 0)} · Third-party {ev.get('third_party', 0)} "
+                f"({ev.get('third_party_pct', 0)}%)")
+    return ""
+
+
+_METHOD_LABELS = {
+    "proportion": "modern vs legacy proportion",
+    "presence": "adoption breadth",
+    "security": "security posture",
+    "governance": "governance signals",
+    "footprint": "publisher footprint (context)",
+}
+
+_METHOD_DESC = {
+    "proportion": "share of modern vs legacy resources",
+    "presence": "how many service families exist (breadth, not depth/volume)",
+    "security": "Defender coverage + high-severity misconfigurations",
+    "governance": "tags, policy compliance, management groups",
+    "footprint": "Microsoft vs third-party publishers (context only)",
+}
+
+
+def _method_label(method: str) -> str:
+    return _METHOD_LABELS.get(method, method or "")
+
+
+def _mod_band_color(score) -> str:
+    if score is None:
+        return "#9AA0A6"
+    if score <= 33:
+        return "#C00000"
+    if score <= 66:
+        return "#C55A11"
+    return "#2E7D32"
+
+
+def _signals_legend(dims: list) -> str:
+    """Subtle legend below the signals table — only for the score bands, levels,
+    confidences and methods actually present in the section."""
+    scores = [d["score"] for d in dims if d["score"] is not None]
+    bands = []
+    if any(s <= 33 for s in scores):
+        bands.append(("#C00000", "0–33 high opportunity"))
+    if any(34 <= s <= 66 for s in scores):
+        bands.append(("#C55A11", "34–66 intermediate"))
+    if any(s >= 67 for s in scores):
+        bands.append(("#2E7D32", "67–100 mature"))
+    band_html = " ".join(
+        f'<span class="lg-band" style="background:{c}"></span>{txt}' for c, txt in bands)
+
+    levels = [lv for lv in ["Low", "Intermediate", "High", "N/A"]
+              if lv in {d["level"] for d in dims}]
+    confs = [c for c in ["High", "Medium", "Low"]
+             if c in {d["confidence"] for d in dims}]
+    methods = []
+    seen = set()
+    for d in dims:
+        m = d["method"]
+        if m in seen:
+            continue
+        seen.add(m)
+        methods.append(f'<em>{_method_label(m)}</em> = {_METHOD_DESC.get(m, m)}')
+
+    grps = []
+    if band_html:
+        grps.append(f'<span><strong>Score</strong> {band_html}</span>')
+    if levels:
+        grps.append(f'<span><strong>Level</strong> {" / ".join(levels)} (reflects the score band)</span>')
+    if confs:
+        grps.append(f'<span><strong>Confidence</strong> {" / ".join(confs)} — Low = weak / partial evidence</span>')
+    if methods:
+        grps.append('<span><strong>Method</strong> ' + '; '.join(methods) + '</span>')
+    return '<div class="mod-tbl-legend">' + "".join(grps) + '</div>'
+
+
+def _build_modernization_tech_html(assessment: dict) -> str:
+    """Detailed technical modernization block, in four parts:
+    1) Current environment (As-Is) KPIs + charts; 2) Modernization opportunities
+    (readiness gauge + cards); 3) per-dimension evidence table; 4) expandable
+    per-dimension detail. All INFERRED, evidence-backed."""
+    if not assessment or not assessment.get("available"):
+        return '<p class="no-data">No modernization signals available.</p>'
+    import json as _json
+    dims = assessment.get("dimensions", [])
+    summary = assessment.get("summary", {})
+    asis = summary.get("as_is", {})
+
+    # ---- Part 1: As-Is KPI chips + charts -------------------------------
+    sm = asis.get("service_model", {})
+    bp = asis.get("business_pillar", {})
+    sm_items = sorted(sm.get("counts", {}).items(), key=lambda x: -x[1])
+    bp_items = sorted(bp.get("counts", {}).items(), key=lambda x: -x[1])[:8]
+    sm_labels = _json.dumps([k for k, _ in sm_items])
+    sm_values = _json.dumps([v for _, v in sm_items])
+    bp_labels = _json.dumps([k for k, _ in bp_items])
+    bp_values = _json.dumps([v for _, v in bp_items])
+    readiness = summary.get("readiness")
+    readiness_txt = "N/A" if readiness is None else f"{readiness}/100"
+    total = asis.get("total_resources", 0)
+    chips = [
+        ("PaaS share", f"{asis.get('paas_pct', 0)}%", "#2E7D32"),
+        ("IaaS share", f"{asis.get('iaas_pct', 0)}%", "#1F4E79"),
+        ("Total resources", f"{total:,}", "#1F4E79"),
+        ("Third-party (context)", f"{asis.get('third_party_pct', 0)}%", "#7F7F7F"),
+    ]
+    chips_html = "".join(
+        f'<div class="mod-chip" style="border-top-color:{c}">'
+        f'<div class="chip-val">{v}</div><div class="chip-lbl">{lbl}</div></div>'
+        for lbl, v, c in chips
+    )
+    asis_html = f"""
+      <details class="mod-fold" open>
+      <summary class="mod-h3">1 · Current Environment (As-Is)</summary>
+      <p class="note">Service model mix, business-pillar distribution, and overall modernization
+        readiness (average of confidently-scored dimensions): <strong>{readiness_txt}</strong>.</p>
+      <div class="mod-kpis">{chips_html}</div>
+      <div class="two-col">
+        <div><strong style="color:#1F4E79;font-size:.9rem">Service Model mix</strong><div class="chart-box" style="margin-top:.5rem"><canvas id="modSvcChartT"></canvas></div></div>
+        <div><strong style="color:#1F4E79;font-size:.9rem">Resources by business pillar</strong><div class="chart-box" style="margin-top:.5rem"><canvas id="modPillarChartT"></canvas></div></div>
+      </div>
+      </details>"""
+
+    # ---- Part 2: Modernization Opportunities (gauge + cards) ------------
+    g_color = _mod_band_color(readiness)
+    g_deg = 0 if readiness is None else round(readiness / 100 * 360)
+    g_val = "N/A" if readiness is None else readiness
+    gauge_html = (
+        f'<div class="gauge" style="background:conic-gradient({g_color} {g_deg}deg,#e8edf3 0deg)">'
+        f'<div class="gauge-inner"><div class="gauge-val" style="color:{g_color}">{g_val}</div>'
+        f'<div class="gauge-cap">Modernization<br>Readiness</div></div></div>'
+    )
+    dim_by_id = {d["id"]: d for d in dims}
+    cards = ""
+    for o in summary.get("top_opportunities", []):
+        d = dim_by_id.get(o["id"], {})
+        score = o["score"] if o["score"] is not None else 0
+        col = _mod_band_color(o["score"])
+        fw = " · ".join(
+            f'<a href="{f.get("url", "#")}" target="_blank">{f.get("name", "")}</a>'
+            for f in d.get("framework_refs", []))
+        cards += (
+            f'<div class="opp-card" style="border-left-color:{col}">'
+            f'<h4>{o["name"]}<span class="opp-score" style="color:{col}">{o["score"] if o["score"] is not None else "N/A"}</span></h4>'
+            f'<div class="opp-bar"><span style="width:{score}%;background:{col}"></span></div>'
+            f'<div style="font-size:.84rem;color:#333;margin-top:.4rem">{d.get("narrative", "")}</div>'
+            f'<div class="opp-meta">Confidence: {o["confidence"]}'
+            + (f' &middot; {fw}' if fw else "")
+            + '</div></div>'
+        )
+    cards = cards or '<p class="no-data">No modernization opportunities identified above threshold.</p>'
+    qw = summary.get("quick_wins", [])
+    qw_html = ""
+    if qw:
+        names = ", ".join(f'{q["name"]} ({q["score"]})' for q in qw)
+        qw_html = f'<div class="mod-qw">⚡ <strong>Quick wins:</strong> {names}</div>'
+    opps_html = f"""
+      <details class="mod-fold" open>
+      <summary class="mod-h3">2 · Modernization Opportunities</summary>
+      <div class="mod-legend">
+        <span><i style="background:#C00000"></i>Lower score = higher opportunity (0–33)</span>
+        <span><i style="background:#C55A11"></i>Intermediate (34–66)</span>
+        <span><i style="background:#2E7D32"></i>Mature adoption (67–100)</span>
+      </div>
+      <div class="mod-opps">
+        <div class="mod-gauge-wrap">{gauge_html}
+          <p class="gauge-note">Average of confidently-scored dimensions. Higher is more modern.</p>
+        </div>
+        <div class="opp-grid">{cards}</div>
+      </div>
+      {qw_html}
+      </details>"""
+
+    # ---- Part 3: evidence table + subtle legend -------------------------
+    rows = ""
+    for d in dims:
+        score = "N/A" if d["score"] is None else d["score"]
+        opp = ('<span style="color:#C00000;font-weight:700">YES</span>'
+               if d["opportunity"] else "—")
+        fw = ", ".join(
+            f'<a href="{f.get("url", "#")}" target="_blank">{f.get("name", "")}</a>'
+            for f in d.get("framework_refs", []))
+        conf = d["confidence"]
+        conf_html = (f'<span style="color:#999;font-style:italic">{conf}</span>'
+                     if conf == "Low" else conf)
+        rows += f"""<tr>
+            <td><strong>{d['name']}</strong></td>
+            <td class="num"><span style="background:{d.get('color', '#9AA0A6')};color:#fff;padding:.1rem .55rem;border-radius:8px;font-weight:700">{score}</span></td>
+            <td>{d['level']}</td>
+            <td>{conf_html}</td>
+            <td style="font-size:.8rem;color:#666">{_method_label(d['method'])}</td>
+            <td style="font-size:.86rem">{d['narrative']}</td>
+            <td style="font-size:.8rem;color:#555">{_mod_evidence_detail(d)}</td>
+            <td>{opp}</td>
+            <td style="font-size:.78rem">{fw}</td>
+        </tr>"""
+    table_html = f"""
+      <details class="mod-fold">
+      <summary class="mod-h3">3 · Signals by Dimension</summary>
+      <div class="table-scroll"><table class="dtable">
+        <thead><tr><th>Dimension</th><th class="num">Score</th><th>Level</th><th>Confidence</th><th>Method</th><th>Signal (inferred)</th><th>Evidence</th><th>Opportunity</th><th>Frameworks</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table></div>
+      {_signals_legend(dims)}
+      </details>"""
+
+    # ---- Part 4: expandable per-dimension detail ------------------------
+    details = ""
+    for d in dims:
+        score = "N/A" if d["score"] is None else d["score"]
+        opp_badge = ('<span style="color:#C00000;font-weight:700">· opportunity</span>'
+                     if d["opportunity"] else "")
+        fw = "".join(
+            f'<li><a href="{f.get("url", "#")}" target="_blank">{f.get("name", "")}</a></li>'
+            for f in d.get("framework_refs", []))
+        details += f"""<details style="margin:.35rem 0;border:1px solid #e6eef7;border-radius:8px;padding:.5rem .8rem">
+          <summary style="cursor:pointer;font-weight:600;color:#1F4E79">
+            {d['name']} — <span style="background:{d.get('color', '#9AA0A6')};color:#fff;padding:.05rem .5rem;border-radius:8px">{score}</span>
+            <span style="font-weight:400;color:#777;font-size:.82rem">({d['level']} · confidence {d['confidence']} {opp_badge})</span>
+          </summary>
+          <div style="margin-top:.5rem;font-size:.86rem;color:#333">
+            <p style="margin-bottom:.4rem">{d['narrative']}</p>
+            <p style="font-size:.8rem;color:#555"><strong>Method:</strong> {_method_label(d['method'])} &middot;
+               <strong>Evidence:</strong> {_mod_evidence_detail(d)}</p>
+            <p style="font-size:.8rem;color:#555;margin-top:.3rem"><strong>Reference frameworks:</strong></p>
+            <ul style="margin:.2rem 0 0 1.1rem;font-size:.8rem">{fw or '<li>—</li>'}</ul>
+          </div>
+        </details>"""
+    details_html = f"""
+      <details class="mod-fold">
+      <summary class="mod-h3">4 · Per-Dimension Detail</summary>
+      {details}
+      </details>"""
+
+    return f"""
+      <p class="note">{assessment.get('inferred_label', '')}</p>
+      <p style="font-size:.9rem;color:#1F4E79;font-weight:600;margin:.4rem 0 .8rem">{summary.get('narrative', '')}</p>
+      {asis_html}
+      {opps_html}
+      {table_html}
+      {details_html}
+      <script>
+      (function(){{
+        if(typeof Chart==='undefined')return;
+        var s=document.getElementById('modSvcChartT');
+        if(s)new Chart(s.getContext('2d'),{{type:'doughnut',data:{{labels:{sm_labels},datasets:[{{data:{sm_values},backgroundColor:['#1F4E79','#2E7D32','#2E86AB','#C55A11','#7F7F7F','#9AA0A6'],borderWidth:2,borderColor:'#fff'}}]}},options:{{responsive:true,maintainAspectRatio:false,plugins:{{legend:{{position:'right',labels:{{font:{{size:11}}}}}}}}}}}});
+        var p=document.getElementById('modPillarChartT');
+        if(p)new Chart(p.getContext('2d'),{{type:'bar',data:{{labels:{bp_labels},datasets:[{{label:'Count',data:{bp_values},backgroundColor:'#2E86AB',borderRadius:4}}]}},options:{{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{{legend:{{display:false}}}},scales:{{x:{{grid:{{display:false}}}},y:{{grid:{{display:false}}}}}}}}}});
+      }})();
+      </script>"""
+
+
 def _render_html(
     scan_date, tenant_id, tenant_name, subscriptions_list, summary,
     inventory_html, waf_html, policy_html, policy_summary_html, misconfig_html,
     health_html, deprecated_html, lz_html,
-    defender_section, zerotrust_html, arc_section, modern_signals, region_summary,
+    defender_section, zerotrust_html, arc_section, modernization_detail_html, region_summary,
     sub_labels, sub_values, sev_labels, sev_values,
     has_defender, has_arc,
     policy_count, misconfig_count, health_count,
@@ -1357,15 +1628,6 @@ def _render_html(
     kpi = summary
     def_nav = '<a href="#defender">🔒 Defender for Cloud</a>' if has_defender else ""
     arc_nav = '<a href="#arc">🌐 Azure Arc</a>' if has_arc else ""
-
-    # Item 0: Modernization Signals HTML
-    signals_html = "".join(
-        f"""<div class="obs obs-info" style="display:flex;align-items:center;gap:1rem;border-left:none;padding:.5rem 0">
-            <span style="background:#1F4E79;color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;flex-shrink:0">{s['count']}</span>
-            <span style="font-size:.88rem">{s['message']}</span>
-        </div>"""
-        for s in modern_signals[:12]
-    ) or '<p class="no-data">No specific modernization signals detected.</p>'
 
     # Item 3: Regional distribution table
     region_rows = "".join(
@@ -1401,6 +1663,41 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 .section h2{{font-size:1.15rem;color:#1F4E79;border-bottom:2px solid #e8f0f7;padding-bottom:.7rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between}}
 .note{{font-size:.82rem;color:#666;margin-bottom:.8rem}}
 .dtable{{width:100%;border-collapse:collapse;font-size:.82rem}}
+.mod-h3{{font-size:1rem;color:#1F4E79;margin:1.2rem 0 .5rem;padding-bottom:.35rem;border-bottom:1px dashed #d5e0ec}}
+.mod-fold{{margin:.6rem 0}}
+summary.mod-h3{{cursor:pointer;list-style:none;display:flex;align-items:center;gap:.5rem;user-select:none}}
+summary.mod-h3::-webkit-details-marker{{display:none}}
+summary.mod-h3::before{{content:'\\25B6';font-size:.72rem;color:#2E86AB;transition:transform .18s}}
+details[open]>summary.mod-h3::before{{transform:rotate(90deg)}}
+summary.mod-h3:hover{{color:#2E86AB}}
+.mod-kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem;margin:.6rem 0 1rem}}
+.mod-chip{{background:#fafcff;border:1px solid #e6eef7;border-top:3px solid #1F4E79;border-radius:10px;padding:.7rem;text-align:center}}
+.mod-chip .chip-val{{font-size:1.5rem;font-weight:800;color:#1F4E79;line-height:1}}
+.mod-chip .chip-lbl{{font-size:.72rem;color:#777;margin-top:.25rem;text-transform:uppercase;letter-spacing:.03em}}
+.mod-legend{{display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.74rem;color:#555;margin:.2rem 0 1rem}}
+.mod-legend span{{display:inline-flex;align-items:center;gap:.35rem}}
+.mod-legend i{{width:12px;height:12px;border-radius:3px;display:inline-block}}
+.mod-opps{{display:grid;grid-template-columns:200px 1fr;gap:1.4rem;align-items:start}}
+.mod-gauge-wrap{{text-align:center}}
+.gauge{{width:170px;height:170px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center}}
+.gauge-inner{{width:120px;height:120px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:inset 0 0 6px rgba(0,0,0,.08)}}
+.gauge-val{{font-size:2.3rem;font-weight:800;line-height:1}}
+.gauge-cap{{font-size:.66rem;color:#777;text-transform:uppercase;letter-spacing:.04em;margin-top:.2rem;line-height:1.15}}
+.gauge-note{{font-size:.68rem;color:#999;margin-top:.5rem;max-width:180px;margin-left:auto;margin-right:auto}}
+.opp-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem}}
+.opp-card{{border:1px solid #e6e0d8;border-left:5px solid #C55A11;border-radius:10px;padding:1rem;background:#fffdfa}}
+.opp-card h4{{color:#1F4E79;font-size:.95rem;margin-bottom:.4rem}}
+.opp-score{{float:right;font-weight:800;font-size:1.1rem}}
+.opp-bar{{background:#eef1f5;border-radius:6px;height:9px;overflow:hidden}}
+.opp-bar span{{display:block;height:100%;border-radius:6px}}
+.opp-meta{{font-size:.75rem;color:#888;margin-top:.5rem}}
+.opp-meta a{{color:#2E86AB;text-decoration:none}}
+.mod-qw{{font-size:.82rem;color:#385723;background:#eef7e6;border-radius:8px;padding:.5rem .8rem;margin-top:.8rem}}
+.mod-tbl-legend{{display:flex;flex-wrap:wrap;gap:.3rem 1.2rem;font-size:.68rem;color:#9aa4ad;margin:.5rem .2rem 0;line-height:1.5}}
+.mod-tbl-legend strong{{color:#7a8894;font-weight:600;margin-right:.25rem}}
+.mod-tbl-legend em{{font-style:italic;color:#8a95a0}}
+.mod-tbl-legend .lg-band{{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 .2rem 0 .4rem;vertical-align:middle}}
+@media(max-width:820px){{.mod-opps{{grid-template-columns:1fr}}}}
 .dtable th{{background:#1F4E79;color:#fff;padding:.55rem .7rem;text-align:left;font-weight:600;white-space:nowrap}}
 .dtable td{{padding:.45rem .7rem;border-bottom:1px solid #f0f0f0;vertical-align:top;word-break:break-word;max-width:280px}}
 .dtable tr:nth-child(even){{background:#f8fafd}}
@@ -1449,6 +1746,10 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
   <a href="#inventory">📦 Resource Inventory</a>
   {arc_nav}
   <a href="#regions">🌍 Regional Distribution</a>
+  <h3>Modernization</h3>
+  <a href="#modernization">🚀 Modernization Signals</a>
+  <h3>Infrastructure</h3>
+  <a href="#lz">🏗 Landing Zone</a>
   <h3>WAF Analysis</h3>
   <a href="#waf">🏛 WAF Pillar Findings</a>
   <h3>Security</h3>
@@ -1459,9 +1760,6 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
   <h3>Reliability</h3>
   <a href="#health">❤ Resource Health</a>
   <a href="#deprecated">⛔ Deprecated Resources</a>
-  <h3>Infrastructure</h3>
-  <a href="#lz">🏗 Landing Zone</a>
-  <a href="#signals">🚀 Modernization Signals</a>
 </nav>
 <div class="main">
   <div class="header">
@@ -1517,6 +1815,23 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
       </div>
     </div>
 
+    <div class="section" id="modernization">
+      <h2>🚀 Cloud Modernization Signals &amp; Opportunity
+        <small style="font-size:.7rem;color:#888;font-weight:normal;margin-left:.5rem">(INFERRED — signals from inventory; evidence-backed, not prescriptive)</small>
+      </h2>
+      <p class="note">Per-dimension maturity/adoption signals with the supporting resources and the scoring method used. Low-confidence rows indicate weak evidence — validate against your architecture.</p>
+      {modernization_detail_html}
+    </div>
+
+    <div class="section" id="lz">
+      <h2>🏗 Landing Zone Observations
+        <small style="font-size:.7rem;color:#888;font-weight:normal;margin-left:.5rem">(Inferred — not authoritative API data)</small>
+      </h2>
+      <p class="note">Inferred observations from resource configuration patterns. Validate against your organizational Landing Zone design.
+      Security observations reference the <a href="https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/landing-zone/design-area/security" target="_blank">CAF Security design area</a>.</p>
+      {lz_html}
+    </div>
+
     <div class="section" id="waf">
       <h2>🏛 Azure Well-Architected Framework Findings <span class="cnt">{advisor_count}</span></h2>
       <p class="note">Azure Advisor recommendations mapped to WAF pillars. Click a pillar to view details.</p>
@@ -1550,23 +1865,6 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
       <h2>⛔ Deprecated &amp; Retiring Resources <span class="cnt">{deprecated_count}</span></h2>
       <p class="note">Resources matching known Azure retirement announcements. Migration paths link to official Microsoft documentation.</p>
       {deprecated_html}
-    </div>
-
-    <div class="section" id="lz">
-      <h2>🏗 Landing Zone Observations
-        <small style="font-size:.7rem;color:#888;font-weight:normal;margin-left:.5rem">(Inferred — not authoritative API data)</small>
-      </h2>
-      <p class="note">Inferred observations from resource configuration patterns. Validate against your organizational Landing Zone design.
-      Security observations reference the <a href="https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/landing-zone/design-area/security" target="_blank">CAF Security design area</a>.</p>
-      {lz_html}
-    </div>
-
-    <div class="section" id="signals">
-      <h2>🚀 Technology & Modernization Signals
-        <small style="font-size:.7rem;color:#888;font-weight:normal;margin-left:.5rem">(Inferred from resource types detected)</small>
-      </h2>
-      <p class="note">Technology adoption signals detected in your infrastructure. This is an inferred assessment based on resource types present.</p>
-      {signals_html}
     </div>
 
 

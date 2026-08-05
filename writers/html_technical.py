@@ -22,11 +22,12 @@ import logging
 from collections import Counter
 from typing import Any, Dict, List
 
+from writers.safety import html_escape, html_safe_data
+
 
 def _esc(value: Any) -> str:
     """HTML-escape a value for safe inline rendering."""
-    import html as _html
-    return _html.escape(str(value if value is not None else ""), quote=True)
+    return html_escape(value)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,8 @@ WAF_COLORS = {
 
 def write_technical_report(scan_data: dict, output_path: str) -> None:
     """Generates the Technical HTML report and writes to output_path."""
+    # Azure resource names, tags, and recommendation text are external input.
+    scan_data = html_safe_data(scan_data)
     meta = scan_data.get("metadata", {})
     summary = scan_data.get("summary_metrics", {})
     advisor_data = scan_data.get("advisor_data", [])

@@ -174,14 +174,19 @@ pyyaml>=6.0.1
 # Authenticate via Azure CLI
 az login
 
-# Run ATI against all accessible subscriptions
-python invoke_ati.py
+# Recommended first scan: scope to one subscription
+python invoke_ati.py --subscription-id <SUBSCRIPTION-ID>
 
-# Run against a specific tenant
-python invoke_ati.py --tenant-id 00000000-0000-0000-0000-000000000000
+# Optional: scan all accessible subscriptions (interactive confirmation required)
+python invoke_ati.py --tenant-id <TENANT-ID>
+
+# Run against a specific tenant and subscription
+python invoke_ati.py --tenant-id <TENANT-ID> --subscription-id <SUBSCRIPTION-ID>
 ```
 
 Output files are saved to `./AzureTenantInsights/` by default.
+
+> **Data handling:** generated reports contain tenant, subscription, resource inventory, posture, and possibly cost data. Treat them as sensitive operational artifacts; do not commit, publish, or share them outside approved storage.
 
 ---
 
@@ -190,7 +195,7 @@ Output files are saved to `./AzureTenantInsights/` by default.
 ### Basic Examples
 
 ```bash
-# Full tenant scan (all accessible subscriptions)
+# Full tenant scan (all accessible subscriptions; interactive confirmation required)
 python invoke_ati.py --tenant-id <TENANT-ID>
 
 # Scope to specific subscription(s)

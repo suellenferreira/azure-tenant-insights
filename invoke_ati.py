@@ -252,6 +252,21 @@ def main() -> None:
             )
             sys.exit(1)
 
+        # A requested tenant is an explicit safety boundary. Do not continue
+        # with subscriptions returned by a different cached CLI/VS Code account.
+        if args.tenant_id:
+            requested_tenant = args.tenant_id.lower()
+            mismatched = [
+                sub for sub in subscriptions
+                if sub.get("tenantId") and sub["tenantId"].lower() != requested_tenant
+            ]
+            if mismatched:
+                logger.error(
+                    "Discovered subscription(s) do not belong to the requested "
+                    "--tenant-id. Verify the active Azure credential/account."
+                )
+                sys.exit(1)
+
         # Apply --max-subscriptions cap (0 = no cap)
         if args.max_subscriptions and len(subscriptions) > args.max_subscriptions:
             logger.warning(
@@ -264,9 +279,9 @@ def main() -> None:
         n_subs = len(subscription_ids)
         logger.info(f"Found {n_subs} subscription(s) to scan")
 
-        # Confirmation prompt when scanning many subscriptions (>5) without -y / --yes
-        _CONFIRM_THRESHOLD = 5
-        if _scope_mode == "all-subscriptions" and n_subs > _CONFIRM_THRESHOLD and not args.yes:
+        # All-subscriptions scans can produce sensitive, tenant-wide inventory.
+        # Require an explicit interactive confirmation; --yes is the automation bypass.
+        if _scope_mode == "all-subscriptions" and n_subs and not args.yes and sys.stdin.isatty():
             print(f"""
 ⚠️  ALL-SUBSCRIPTIONS MODE
    Found {n_subs} accessible subscriptions in this tenant.
@@ -309,10 +324,17 @@ def main() -> None:
             _resp.raise_for_status()
             _tenants_raw = _resp.json().get("value", [])
             if _tenants_raw:
-                _match = (
-                    next((t for t in _tenants_raw if t.get("tenantId") == actual_tenant_id), None)
-                    or _tenants_raw[0]
+                _match = next(
+                    (t for t in _tenants_raw if t.get("tenantId") == actual_tenant_id),
+                    None,
                 )
+                if args.tenant_id and _match is None:
+                    logger.error(
+                        "The authenticated credential cannot access the requested "
+                        "--tenant-id. Verify the active Azure account or Service Principal."
+                    )
+                    sys.exit(1)
+                _match = _match or _tenants_raw[0]
                 if actual_tenant_id in ("N/A", None):
                     actual_tenant_id = _match.get("tenantId") or "N/A"
                 tenant_name = _match.get("displayName") or "N/A"

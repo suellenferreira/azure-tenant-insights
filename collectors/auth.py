@@ -31,10 +31,14 @@ def get_credential(
     """
     from azure.identity import ClientSecretCredential, DefaultAzureCredential
 
-    if client_id and client_secret:
-        if not tenant_id:
+    # A partial Service Principal configuration must never silently fall back to
+    # a cached CLI/VS Code/managed-identity credential for a different account.
+    if client_id or client_secret:
+        if not (tenant_id and client_id and client_secret):
             raise ValueError(
-                "--tenant-id is required when using Service Principal authentication."
+                "Service Principal authentication requires --tenant-id, --client-id, "
+                "and --client-secret together. Remove the partial options to use "
+                "DefaultAzureCredential instead."
             )
         logger.debug("Using Service Principal (ClientSecretCredential) authentication")
         return ClientSecretCredential(

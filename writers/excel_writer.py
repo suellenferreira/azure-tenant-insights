@@ -25,6 +25,8 @@ import logging
 import os
 from typing import Any, Dict, List
 
+from writers.safety import excel_safe_data
+
 logger = logging.getLogger(__name__)
 
 # Excel column color constants
@@ -91,6 +93,9 @@ def write_excel(scan_data: dict, output_path: str) -> None:
     """Main entry point — builds the full Excel workbook."""
     import openpyxl
 
+    # Resource names, tags, and collector fields may be attacker-controlled.
+    # Treat formula-looking strings as literal workbook values.
+    scan_data = excel_safe_data(scan_data)
     logger.info(f"Building Excel workbook: {output_path}")
     wb = openpyxl.Workbook()
     wb.remove(wb.active)  # Remove the default empty sheet

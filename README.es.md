@@ -163,14 +163,19 @@ pip install -r requirements.txt
 # Autenticarse vía Azure CLI
 az login
 
-# Ejecutar ATI contra todas las suscripciones accesibles
-python invoke_ati.py
+# Primer análisis recomendado: limitar a una suscripción
+python invoke_ati.py --subscription-id <SUBSCRIPTION-ID>
 
-# Ejecutar para un tenant específico
-python invoke_ati.py --tenant-id 00000000-0000-0000-0000-000000000000
+# Opcional: analizar todas las suscripciones accesibles (requiere confirmación interactiva)
+python invoke_ati.py --tenant-id <TENANT-ID>
+
+# Ejecutar para un tenant y una suscripción específicos
+python invoke_ati.py --tenant-id <TENANT-ID> --subscription-id <SUBSCRIPTION-ID>
 ```
 
 Los archivos de salida se guardan en `./AzureTenantInsights/` por defecto.
+
+> **Manejo de datos:** los informes generados contienen datos del tenant, suscripciones, inventario de recursos, postura y posiblemente costes. Trátalos como artefactos operativos sensibles; no los confirmes en Git, publiques ni compartas fuera de un almacenamiento aprobado.
 
 ---
 
@@ -179,7 +184,7 @@ Los archivos de salida se guardan en `./AzureTenantInsights/` por defecto.
 ### Ejemplos Básicos
 
 ```bash
-# Análisis completo del tenant (todas las suscripciones accesibles)
+# Análisis completo del tenant (todas las suscripciones accesibles; requiere confirmación interactiva)
 python invoke_ati.py --tenant-id <TENANT-ID>
 
 # Limitar a suscripciones específicas

@@ -11,6 +11,7 @@
 ## Índice
 
 - [Visão Geral](#visão-geral)
+- [Exemplos de Saída](#exemplos-de-saída)
 - [Principais Recursos](#principais-recursos)
 - [Pré-requisitos](#pré-requisitos)
 - [Instalação](#instalação)
@@ -40,6 +41,60 @@ O Azure Tenant Insights (ATI) realiza o scan de um tenant Azure (assinaturas ún
 | `*.drawio` | Arquitetos | Diagrama de arquitetura multi-página — Overview, Organization, Service Model, Business Pillar, Network Topology, Network Detail, Security Posture e Recursos por assinatura — com ícones Azure reais; abra no [draw.io](https://app.diagrams.net) |
 
 Todos os dados são obtidos **exclusivamente de APIs oficiais do Azure** — Azure Resource Graph, Azure Advisor, Azure Policy Insights, Resource Health e, opcionalmente, Defender for Cloud e Cost Management.
+
+---
+
+## Exemplos de Saída
+
+> Todas as imagens abaixo usam **dados sintéticos e fictícios** (um tenant de exemplo “Contoso”), apenas para ilustração — nenhuma informação real de tenant, assinatura ou recurso.
+
+### Relatório HTML Executivo
+
+Relatório completo com menu lateral à esquerda, KPIs, gráficos e a seção Cloud Modernization Signals & Opportunity:
+
+![Relatório Executivo — página inteira](docs/images/executive-full.png)
+
+Cloud Modernization Signals & Opportunity — gráficos As-Is + medidor de prontidão e cards de oportunidade:
+
+![Executivo — Modernization Signals & Opportunity](docs/images/executive-modernization.png)
+
+### Relatório HTML Técnico
+
+Menu lateral à esquerda com a seção Modernization Signals (As-Is + Opportunities):
+
+![Relatório Técnico — sidebar + Modernization](docs/images/technical-modernization.png)
+
+### Inventário Excel
+
+Painel Overview — KPIs, Service Model, Business Pillar, Modernization Signals e posture de planos do Defender for Cloud:
+
+![Excel — Overview](docs/images/excel-overview.png)
+
+Taxonomia de classificação de recursos (Categoria Técnica / Pilar de Negócio / Modelo de Serviço / Publisher):
+
+![Excel — Classification](docs/images/excel-classification.png)
+
+Tabela plana `AllResources`:
+
+![Excel — All Resources](docs/images/excel-allresources.png)
+
+### Diagrama de arquitetura draw.io
+
+Organization — Tenant → Management Groups → Subscriptions:
+
+![draw.io — Organization](docs/images/drawio-organization.png)
+
+Network Topology — VNets / subnets / peerings, com detecção de órfãos:
+
+![draw.io — Network Topology](docs/images/drawio-network-topology.png)
+
+Network Detail — recursos posicionados dentro de suas subnets:
+
+![draw.io — Network Detail](docs/images/drawio-network-detail.png)
+
+Service Model — recursos agrupados por IaaS / PaaS / Hybrid / Supporting / Other:
+
+![draw.io — Service Model](docs/images/drawio-service-model.png)
 
 ---
 

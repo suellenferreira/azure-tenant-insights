@@ -570,6 +570,62 @@ def _build_zero_trust_executive_html(misconfig_findings: list) -> str:
     )
 
 
+_FAM_ACRONYMS = {"aks", "ai", "sql", "vm", "api", "aci", "acr", "cdn", "waf", "dns", "iot"}
+
+
+_FAM_LABEL_OVERRIDES = {"openai_ai_services": "OpenAI / AI Services"}
+
+
+def _fam_label(key: str) -> str:
+    """Human-friendly label for a service-family config key (e.g. aks -> AKS)."""
+    if key in _FAM_LABEL_OVERRIDES:
+        return _FAM_LABEL_OVERRIDES[key]
+    return " ".join(w.upper() if w.lower() in _FAM_ACRONYMS else w.capitalize()
+                    for w in str(key).split("_"))
+
+
+def _mod_evidence_text(d: dict) -> str:
+    """One-line evidence summary per scoring method (used as a hover tooltip)."""
+    ev = d.get("evidence", {}) or {}
+    m = d.get("method")
+    if m == "proportion":
+        return (f"modern {ev.get('modern', 0)} vs legacy {ev.get('legacy', 0)} "
+                f"(of {ev.get('total', 0)} resources)")
+    if m == "presence":
+        fams = ev.get("families", {}) or {}
+        present = [_fam_label(k) for k, v in fams.items() if v]
+        absent = [_fam_label(k) for k, v in fams.items() if not v]
+        return (f"{ev.get('present', 0)}/{ev.get('total', 0)} modern platform families present"
+                + (f" — present: {', '.join(present)}" if present else "")
+                + (f"; absent: {', '.join(absent)}" if absent else ""))
+    if m == "security":
+        cov = ev.get("defender_coverage_pct")
+        return (f"Defender {cov if cov is not None else 'n/a'}% · "
+                f"High misconfig {ev.get('high_misconfig', 0)}")
+    if m == "governance":
+        return (f"tags {ev.get('tag_pct')}% · compliance {ev.get('compliance_pct')}% · "
+                f"MGs {ev.get('mg_count', 0)}")
+    if m == "footprint":
+        return (f"Microsoft {ev.get('microsoft', 0)} · Third-party {ev.get('third_party', 0)} "
+                f"({ev.get('third_party_pct', 0)}%)")
+    return ""
+
+
+def _fam_checklist_html(d: dict) -> str:
+    """Present/absent checklist of modern service families (presence dims only)."""
+    if d.get("method") != "presence":
+        return ""
+    fams = (d.get("evidence", {}) or {}).get("families", {}) or {}
+    if not fams:
+        return ""
+    items = "".join(
+        f'<span class="fam {"fam-yes" if v else "fam-no"}">'
+        f'{"✓" if v else "✗"} {_fam_label(k)}{f" ({v})" if v else ""}</span>'
+        for k, v in fams.items()
+    )
+    return f'<div class="opp-fams">{items}</div>'
+
+
 def _build_modernization_exec_html(assessment: dict) -> str:
     """Executive 'Cloud Modernization & Opportunity' block, in two parts:
     Part 1 — Current environment (As-Is) charts; Part 2 — Opportunities
@@ -637,9 +693,10 @@ def _build_modernization_exec_html(assessment: dict) -> str:
         )
         cards += (
             f'<div class="opp-card" style="border-left-color:{col}">'
-            f'<h4>{o["name"]}<span class="opp-score" style="color:{col}">{o["score"] if o["score"] is not None else "N/A"}</span></h4>'
+            f'<h4>{o["name"]}<span class="opp-score" style="color:{col}" title="{_mod_evidence_text(d).replace(chr(34), chr(39))}">{o["score"] if o["score"] is not None else "N/A"}</span></h4>'
             f'<div class="opp-bar"><span style="width:{score}%;background:{col}"></span></div>'
             f'<div style="font-size:.84rem;color:#333;margin-top:.4rem">{d.get("narrative", "")}</div>'
+            f'{_fam_checklist_html(d)}'
             f'<div class="opp-meta">Confidence: {o["confidence"]}'
             + (f' &middot; {fw}' if fw else "")
             + '</div></div>'
@@ -661,8 +718,12 @@ def _build_modernization_exec_html(assessment: dict) -> str:
 
     <h3 class="mod-h3">1 · Current Environment (As-Is)</h3>
     <div class="mod-kpis">{chips_html}</div>
-    <div class="two-col">
-      <div><div class="mod-sub">Service Model mix</div><div class="chart-box" style="height:240px"><canvas id="modSvcChart"></canvas></div></div>
+        <div class="two-col">
+            <div>
+                <div class="mod-sub">Service Model mix <span class="sm-info" title="Hybrid: cross-environment management such as Arc, VMware, or Azure Stack. Supporting Services: shared security, operations, governance, and monitoring. Other: unclassified or third-party / Marketplace resource types.">ⓘ</span></div>
+                <details class="sm-help"><summary>What do Hybrid, Supporting Services, and Other mean?</summary><p><strong>Hybrid:</strong> Arc, VMware, Azure Stack, and cross-environment management. <strong>Supporting Services:</strong> shared security, operations, governance, and monitoring services. <strong>Other:</strong> unclassified or third-party / Marketplace resource types; not necessarily a concern.</p></details>
+                <div class="chart-box" style="height:240px"><canvas id="modSvcChart"></canvas></div>
+            </div>
       <div><div class="mod-sub">Resources by business pillar</div><div class="chart-box" style="height:240px"><canvas id="modPillarChart"></canvas></div></div>
     </div>
 
@@ -672,6 +733,7 @@ def _build_modernization_exec_html(assessment: dict) -> str:
       <span><i style="background:#C55A11"></i>Intermediate (34–66)</span>
       <span><i style="background:#2E7D32"></i>Mature adoption (67–100)</span>
     </div>
+    <p class="mod-breadth-note">Presence-based signals measure <strong>adoption breadth</strong> — how many distinct modern platform families are present (✓/✗ per card), <strong>not</strong> the volume or depth of any single one. Hover a score for the evidence.</p>
     <div class="mod-opps">
       <div class="mod-gauge-wrap">{gauge_html}
         <p class="gauge-note">Average of confidently-scored dimensions. Higher is more modern.</p>
@@ -774,6 +836,10 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 .mod-narr{{font-size:.95rem;color:#1a1a2e;background:#eef4fb;border-left:4px solid #2E86AB;padding:.7rem 1rem;border-radius:0 8px 8px 0;margin-bottom:.8rem}}
 .mod-h3{{font-size:1.02rem;color:#1F4E79;margin:1.1rem 0 .6rem;padding-bottom:.35rem;border-bottom:1px dashed #d5e0ec}}
 .mod-sub{{font-size:.8rem;font-weight:600;color:#555;margin-bottom:.3rem}}
+.sm-info{{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border:1px solid #2E86AB;border-radius:50%;color:#2E86AB;font-size:.62rem;vertical-align:1px;cursor:help}}
+.sm-help{{font-size:.71rem;color:#777;margin:-.1rem 0 .35rem}}
+.sm-help summary{{cursor:pointer;color:#2E86AB;font-weight:600}}
+.sm-help p{{margin:.3rem 0 0;line-height:1.4}}
 .mod-kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem;margin-bottom:1rem}}
 .mod-chip{{background:#fafcff;border:1px solid #e6eef7;border-top:3px solid #1F4E79;border-radius:10px;padding:.7rem;text-align:center}}
 .mod-chip .chip-val{{font-size:1.5rem;font-weight:800;color:#1F4E79;line-height:1}}
@@ -794,6 +860,11 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 .opp-score{{float:right;font-weight:800;font-size:1.1rem}}
 .opp-bar{{background:#eef1f5;border-radius:6px;height:9px;overflow:hidden}}
 .opp-bar span{{display:block;height:100%;border-radius:6px}}
+.opp-fams{{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.55rem}}
+.opp-fams .fam{{font-size:.7rem;padding:.1rem .45rem;border-radius:10px;white-space:nowrap;font-weight:600}}
+.opp-fams .fam-yes{{background:#eef7e6;color:#2E7D32}}
+.opp-fams .fam-no{{background:#f3f4f6;color:#9aa0a6}}
+.mod-breadth-note{{font-size:.72rem;color:#777;margin:-.4rem 0 1rem;font-style:italic}}
 .opp-meta{{font-size:.75rem;color:#888;margin-top:.5rem}}
 .opp-meta a{{color:#2E86AB;text-decoration:none}}
 .mod-qw{{font-size:.82rem;color:#385723;background:#eef7e6;border-radius:8px;padding:.5rem .8rem;margin-top:.8rem}}

@@ -1353,8 +1353,10 @@ def _mod_evidence_detail(d: dict) -> str:
                 f"total={ev.get('total', 0)}")
     if m == "presence":
         fams = ev.get("families", {}) or {}
-        present = ", ".join(f"{k}={v}" for k, v in fams.items() if v) or "none"
-        return f"{ev.get('present', 0)}/{ev.get('total', 0)} families present ({present})"
+        present = ", ".join(f"{_fam_label(k)}={v}" for k, v in fams.items() if v) or "none"
+        absent = ", ".join(_fam_label(k) for k, v in fams.items() if not v)
+        base = f"{ev.get('present', 0)}/{ev.get('total', 0)} families present ({present})"
+        return base + (f"; absent: {absent}" if absent else "")
     if m == "security":
         cov = ev.get("defender_coverage_pct")
         return (f"Defender coverage {cov if cov is not None else 'n/a'}% · "
@@ -1387,6 +1389,34 @@ _METHOD_DESC = {
 
 def _method_label(method: str) -> str:
     return _METHOD_LABELS.get(method, method or "")
+
+
+_FAM_ACRONYMS = {"aks", "ai", "sql", "vm", "api", "aci", "acr", "cdn", "waf", "dns", "iot"}
+
+
+_FAM_LABEL_OVERRIDES = {"openai_ai_services": "OpenAI / AI Services"}
+
+
+def _fam_label(key: str) -> str:
+    if key in _FAM_LABEL_OVERRIDES:
+        return _FAM_LABEL_OVERRIDES[key]
+    return " ".join(w.upper() if w.lower() in _FAM_ACRONYMS else w.capitalize()
+                    for w in str(key).split("_"))
+
+
+def _fam_checklist_html(d: dict) -> str:
+    """Present/absent checklist of modern service families (presence dims only)."""
+    if d.get("method") != "presence":
+        return ""
+    fams = (d.get("evidence", {}) or {}).get("families", {}) or {}
+    if not fams:
+        return ""
+    items = "".join(
+        f'<span class="fam {"fam-yes" if v else "fam-no"}">'
+        f'{"✓" if v else "✗"} {_fam_label(k)}{f" ({v})" if v else ""}</span>'
+        for k, v in fams.items()
+    )
+    return f'<div class="opp-fams">{items}</div>'
 
 
 def _mod_band_color(score) -> str:
@@ -1479,8 +1509,12 @@ def _build_modernization_tech_html(assessment: dict) -> str:
       <p class="note">Service model mix, business-pillar distribution, and overall modernization
         readiness (average of confidently-scored dimensions): <strong>{readiness_txt}</strong>.</p>
       <div class="mod-kpis">{chips_html}</div>
-      <div class="two-col">
-        <div><strong style="color:#1F4E79;font-size:.9rem">Service Model mix</strong><div class="chart-box" style="margin-top:.5rem"><canvas id="modSvcChartT"></canvas></div></div>
+            <div class="two-col">
+                <div>
+                    <strong style="color:#1F4E79;font-size:.9rem">Service Model mix <span class="sm-info" title="Hybrid: cross-environment management such as Arc, VMware, or Azure Stack. Supporting Services: shared security, operations, governance, and monitoring. Other: unclassified or third-party / Marketplace resource types.">ⓘ</span></strong>
+                    <details class="sm-help"><summary>What do Hybrid, Supporting Services, and Other mean?</summary><p><strong>Hybrid:</strong> Arc, VMware, Azure Stack, and cross-environment management. <strong>Supporting Services:</strong> shared security, operations, governance, and monitoring services. <strong>Other:</strong> unclassified or third-party / Marketplace resource types; not necessarily a concern. See the Excel <em>Classification</em> sheet for the resource-type breakdown.</p></details>
+                    <div class="chart-box" style="margin-top:.5rem"><canvas id="modSvcChartT"></canvas></div>
+                </div>
         <div><strong style="color:#1F4E79;font-size:.9rem">Resources by business pillar</strong><div class="chart-box" style="margin-top:.5rem"><canvas id="modPillarChartT"></canvas></div></div>
       </div>
       </details>"""
@@ -1505,9 +1539,10 @@ def _build_modernization_tech_html(assessment: dict) -> str:
             for f in d.get("framework_refs", []))
         cards += (
             f'<div class="opp-card" style="border-left-color:{col}">'
-            f'<h4>{o["name"]}<span class="opp-score" style="color:{col}">{o["score"] if o["score"] is not None else "N/A"}</span></h4>'
+            f'<h4>{o["name"]}<span class="opp-score" style="color:{col}" title="{_mod_evidence_detail(d).replace(chr(34), chr(39))}">{o["score"] if o["score"] is not None else "N/A"}</span></h4>'
             f'<div class="opp-bar"><span style="width:{score}%;background:{col}"></span></div>'
             f'<div style="font-size:.84rem;color:#333;margin-top:.4rem">{d.get("narrative", "")}</div>'
+            f'{_fam_checklist_html(d)}'
             f'<div class="opp-meta">Confidence: {o["confidence"]}'
             + (f' &middot; {fw}' if fw else "")
             + '</div></div>'
@@ -1526,6 +1561,7 @@ def _build_modernization_tech_html(assessment: dict) -> str:
         <span><i style="background:#C55A11"></i>Intermediate (34–66)</span>
         <span><i style="background:#2E7D32"></i>Mature adoption (67–100)</span>
       </div>
+      <p class="mod-breadth-note">Presence-based signals measure <strong>adoption breadth</strong> — how many distinct modern platform families are present (✓/✗ per card), <strong>not</strong> the volume or depth of any single one. Hover a score for the evidence.</p>
       <div class="mod-opps">
         <div class="mod-gauge-wrap">{gauge_html}
           <p class="gauge-note">Average of confidently-scored dimensions. Higher is more modern.</p>
@@ -1670,6 +1706,10 @@ summary.mod-h3::-webkit-details-marker{{display:none}}
 summary.mod-h3::before{{content:'\\25B6';font-size:.72rem;color:#2E86AB;transition:transform .18s}}
 details[open]>summary.mod-h3::before{{transform:rotate(90deg)}}
 summary.mod-h3:hover{{color:#2E86AB}}
+.sm-info{{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border:1px solid #2E86AB;border-radius:50%;color:#2E86AB;font-size:.62rem;vertical-align:1px;cursor:help}}
+.sm-help{{font-size:.71rem;color:#777;margin:.25rem 0 -.1rem}}
+.sm-help summary{{cursor:pointer;color:#2E86AB;font-weight:600}}
+.sm-help p{{margin:.3rem 0 0;line-height:1.4}}
 .mod-kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem;margin:.6rem 0 1rem}}
 .mod-chip{{background:#fafcff;border:1px solid #e6eef7;border-top:3px solid #1F4E79;border-radius:10px;padding:.7rem;text-align:center}}
 .mod-chip .chip-val{{font-size:1.5rem;font-weight:800;color:#1F4E79;line-height:1}}
@@ -1690,6 +1730,11 @@ summary.mod-h3:hover{{color:#2E86AB}}
 .opp-score{{float:right;font-weight:800;font-size:1.1rem}}
 .opp-bar{{background:#eef1f5;border-radius:6px;height:9px;overflow:hidden}}
 .opp-bar span{{display:block;height:100%;border-radius:6px}}
+.opp-fams{{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.55rem}}
+.opp-fams .fam{{font-size:.7rem;padding:.1rem .45rem;border-radius:10px;white-space:nowrap;font-weight:600}}
+.opp-fams .fam-yes{{background:#eef7e6;color:#2E7D32}}
+.opp-fams .fam-no{{background:#f3f4f6;color:#9aa0a6}}
+.mod-breadth-note{{font-size:.72rem;color:#777;margin:-.3rem 0 1rem;font-style:italic}}
 .opp-meta{{font-size:.75rem;color:#888;margin-top:.5rem}}
 .opp-meta a{{color:#2E86AB;text-decoration:none}}
 .mod-qw{{font-size:.82rem;color:#385723;background:#eef7e6;border-radius:8px;padding:.5rem .8rem;margin-top:.8rem}}

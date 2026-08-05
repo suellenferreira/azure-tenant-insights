@@ -600,6 +600,22 @@ def _write_overview_sheet(wb, scan_data: dict):
         )
         ws.row_dimensions[_r].height = 20
 
+    # Low-emphasis classification notes for the less self-explanatory models.
+    _sm_notes = [
+        "Hybrid: Arc, VMware, Azure Stack, and cross-environment management.",
+        "Supporting Services: shared security, operations, governance, and monitoring.",
+        "Other: unclassified or third-party / Marketplace types; not necessarily a concern.",
+    ]
+    for _i, _note in enumerate(_sm_notes):
+        _r = 23 + _i
+        ws.merge_cells(start_row=_r, start_column=4, end_row=_r, end_column=6)
+        _nc = ws.cell(row=_r, column=4)
+        _nc.value = _note
+        _nc.font = Font(size=8, italic=True, color="888888")
+        _nc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        _nc.fill = PatternFill("solid", fgColor="FAFAFA")
+        ws.row_dimensions[_r].height = 22
+
     # Service Model pie chart (next to the table)
     _sm_n = len(_sm_labels[:6])
     if _sm_n:
@@ -1109,6 +1125,19 @@ def _write_classification_sheet(wb, scan_data: dict, sheet_map: Dict[str, str]):
     _col_widths(ws, [46, 28, 20, 20, 14, 10, 30])
 
 
+_FAM_ACRONYMS = {"aks", "ai", "sql", "vm", "api", "aci", "acr", "cdn", "waf", "dns", "iot"}
+
+
+_FAM_LABEL_OVERRIDES = {"openai_ai_services": "OpenAI / AI Services"}
+
+
+def _fam_label(key: str) -> str:
+    if key in _FAM_LABEL_OVERRIDES:
+        return _FAM_LABEL_OVERRIDES[key]
+    return " ".join(w.upper() if w.lower() in _FAM_ACRONYMS else w.capitalize()
+                    for w in str(key).split("_"))
+
+
 def _mod_evidence_text(d: dict) -> str:
     ev = d.get("evidence", {}) or {}
     m = d.get("method")
@@ -1116,9 +1145,14 @@ def _mod_evidence_text(d: dict) -> str:
         return f"modern={ev.get('modern', 0)}, legacy={ev.get('legacy', 0)}, total={ev.get('total', 0)}"
     if m == "presence":
         fams = ev.get("families", {}) or {}
-        present = [f"{k}={v}" for k, v in fams.items() if v]
+        present = [f"{_fam_label(k)}={v}" for k, v in fams.items() if v]
+        absent = [_fam_label(k) for k, v in fams.items() if not v]
         base = f"{ev.get('present', 0)}/{ev.get('total', 0)} families"
-        return base + (": " + ", ".join(present) if present else "")
+        if present:
+            base += " present: " + ", ".join(present)
+        if absent:
+            base += " · absent: " + ", ".join(absent)
+        return base
     if m == "security":
         cov = ev.get("defender_coverage_pct")
         return f"Defender {cov if cov is not None else 'n/a'}% · High misconfig {ev.get('high_misconfig', 0)}"

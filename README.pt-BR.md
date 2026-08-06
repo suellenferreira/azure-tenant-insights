@@ -91,13 +91,15 @@ recomenda-se limitar o scan a uma assinatura.
 
 ### 🔎 Do Inventário aos Insights
 
-| Sem ATI | Com ATI |
+| Sem ATI* (fluxo baseline via Portal/CLI) | Com ATI |
 |---|---|
 | As informações de recursos ficam distribuídas entre assinaturas e serviços Azure | Um inventário consolidado é gerado para o escopo selecionado |
-| Segurança, governança, saúde, custos e arquitetura são analisadas separadamente | Os sinais são agrupados em relatórios e visões consistentes |
-| As conversas sobre modernização dependem de suposições ou de uma descoberta incompleta | Os sinais iniciais de modernização são apoiados por padrões de recursos observados |
-| Detalhes técnicos são difíceis de apresentar para públicos diferentes | Visões executiva, técnica, Excel e arquitetura são geradas em conjunto |
-| A descoberta é manual e inconsistente | A avaliação pode ser repetida usando o mesmo fluxo somente leitura |
+| As evidências são coletadas em múltiplas páginas do portal, consultas de CLI e exportações | Os sinais são agrupados em relatórios e visões consistentes |
+| Conversas de modernização geralmente exigem correlação adicional entre fontes e equipes | Os sinais iniciais de modernização são apoiados por padrões de recursos observados |
+| Produzir saídas por público (executivo, técnico, arquitetura) normalmente exige preparação adicional | Visões executiva, técnica, Excel e arquitetura são geradas em conjunto |
+| A repetibilidade depende de reproduzir manualmente escopo, consultas e etapas de exportação | A avaliação pode ser repetida usando o mesmo fluxo somente leitura |
+
+> **\*** Ferramentas especializadas de assessment (incluindo Azure Migrate em cenários de migração) podem oferecer análises profundas para casos específicos. Esta comparação reflete um fluxo genérico centrado em Portal/CLI sem ATI.
 
 ### ✨ O Que Diferencia o ATI
 

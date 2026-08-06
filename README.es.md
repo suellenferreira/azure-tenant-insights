@@ -91,13 +91,15 @@ se recomienda limitar el análisis a una suscripción.
 
 ### 🔎 Del Inventario a los Insights
 
-| Sin ATI | Con ATI |
+| Sin ATI* (flujo baseline vía Portal/CLI) | Con ATI |
 |---|---|
 | La información de recursos está distribuida entre suscripciones y servicios de Azure | Se genera un inventario consolidado para el alcance seleccionado |
-| Seguridad, gobernanza, estado, costos y arquitectura se revisan por separado | Las señales se agrupan en informes y vistas consistentes |
-| Las conversaciones sobre modernización dependen de suposiciones o de un descubrimiento incompleto | Las señales iniciales de modernización se apoyan en patrones de recursos observados |
-| Los detalles técnicos son difíciles de presentar a audiencias diferentes | Las vistas ejecutiva, técnica, Excel y de arquitectura se generan juntas |
-| El descubrimiento se realiza manualmente y de forma inconsistente | La evaluación puede repetirse con el mismo flujo de solo lectura |
+| La evidencia se recopila en múltiples páginas del portal, consultas de CLI y exportaciones | Las señales se agrupan en informes y vistas consistentes |
+| Las conversaciones de modernización suelen requerir correlación adicional entre fuentes y equipos | Las señales iniciales de modernización se apoyan en patrones de recursos observados |
+| Generar salidas por audiencia (ejecutiva, técnica, arquitectura) suele requerir preparación adicional | Las vistas ejecutiva, técnica, Excel y de arquitectura se generan juntas |
+| La repetibilidad depende de reproducir manualmente el alcance, las consultas y los pasos de exportación | La evaluación puede repetirse con el mismo flujo de solo lectura |
+
+> **\*** Las herramientas especializadas de assessment (incluido Azure Migrate para escenarios de migración) pueden ofrecer análisis profundos para casos específicos. Esta comparación refleja un flujo genérico centrado en Portal/CLI sin ATI.
 
 ### ✨ Qué Hace Diferente a ATI
 

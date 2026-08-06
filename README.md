@@ -91,13 +91,15 @@ scoping the scan to one subscription is recommended.
 
 ### 🔎 From Inventory to Insights
 
-| Without ATI | With ATI |
+| Without ATI* (portal/CLI-based baseline workflow) | With ATI |
 |---|---|
 | Resource information is spread across subscriptions and Azure services | A consolidated inventory is generated for the selected scope |
-| Security, governance, health, cost, and architecture information is reviewed separately | Signals are grouped into a consistent set of reports and views |
-| Modernization discussions rely mainly on assumptions or incomplete discovery | Initial modernization signals are supported by observed Azure resource patterns |
-| Technical details are difficult to present to different audiences | Executive, technical, Excel, and architecture views are generated together |
-| Discovery is performed manually and inconsistently | The assessment can be repeated using the same read-only workflow |
+| Evidence is gathered across multiple portal pages, CLI queries, and exports | Signals are grouped into a consistent set of reports and views |
+| Modernization discussions usually require additional correlation across sources and teams | Initial modernization signals are supported by observed Azure resource patterns |
+| Producing audience-specific outputs (executive, technical, architecture) usually requires additional preparation | Executive, technical, Excel, and architecture views are generated together |
+| Repeatability depends on manually reproducing scope, queries, and export steps | The assessment can be repeated using the same read-only workflow |
+
+> **\*** Specialized assessment tools (including Azure Migrate for migration scenarios) can provide deep scenario-specific analysis. This comparison reflects a generic portal/CLI-centered workflow without ATI.
 
 ### ✨ What Makes ATI Different
 

@@ -11,6 +11,7 @@
 ## Índice
 
 - [Visão Geral](#visão-geral)
+- [Por Que e Quando Executar o ATI](#por-que-e-quando-executar-o-ati)
 - [Exemplos de Saída](#exemplos-de-saída)
 - [Principais Recursos](#principais-recursos)
 - [Pré-requisitos](#pré-requisitos)
@@ -41,6 +42,100 @@ O Azure Tenant Insights (ATI) realiza o scan de um tenant Azure (assinaturas ún
 | `*.drawio` | Arquitetos | Diagrama de arquitetura multi-página — Overview, Organization, Service Model, Business Pillar, Network Topology, Network Detail, Security Posture e Recursos por assinatura — com ícones Azure reais; abra no [draw.io](https://app.diagrams.net) |
 
 Todos os dados são obtidos **exclusivamente de APIs oficiais do Azure** — Azure Resource Graph, Azure Advisor, Azure Policy Insights, Resource Health e, opcionalmente, Defender for Cloud e Cost Management.
+
+---
+
+## Por Que e Quando Executar o ATI
+
+Ambientes Azure frequentemente contêm as informações necessárias para uma avaliação,
+mas esses dados ficam distribuídos entre assinaturas, tipos de recurso, regiões,
+policies, recomendações do Advisor, Defender for Cloud e dados de custo.
+
+O ATI reúne esses sinais em uma avaliação somente leitura que ajuda as equipes a sair
+de:
+
+> "O que temos?"
+
+para:
+
+> "O que devemos entender, validar e discutir a seguir?"
+
+O ATI ajuda a responder perguntas como:
+
+- Quais recursos e serviços Azure estão implantados atualmente?
+- Onde estão os principais sinais de segurança, governança, saúde e conformidade?
+- Como o ambiente está distribuído entre assinaturas, regiões, modelos de serviço
+  e áreas de negócio?
+- Quais recursos cloud-native, de dados, AI, integração ou plataforma já estão
+  presentes?
+- Onde podem existir oportunidades de modernização, otimização ou governança?
+- Que evidências arquitetos, equipes de segurança e account teams devem investigar
+  mais profundamente?
+
+### 🧭 Quando o ATI É Útil
+
+O ATI é útil quando uma equipe precisa de uma linha de base baseada em evidências para:
+
+- Descoberta de clientes ou tenants;
+- Avaliações de adoção da nuvem e landing zones;
+- Planejamento de modernização e transformação de aplicações;
+- Revisões de postura de segurança e governança;
+- Revisões de arquitetura e distribuição regional;
+- Planejamento de consolidação ou migração de assinaturas;
+- Briefings executivos, QBRs e workshops técnicos;
+- Snapshots periódicos para comparar a evolução de um ambiente Azure.
+
+O ATI pode ser executado em uma única assinatura para uma avaliação focada ou em
+várias assinaturas para uma visão mais ampla do tenant. Para a primeira execução,
+recomenda-se limitar o scan a uma assinatura.
+
+### 🔎 Do Inventário aos Insights
+
+| Sem ATI | Com ATI |
+|---|---|
+| As informações de recursos ficam distribuídas entre assinaturas e serviços Azure | Um inventário consolidado é gerado para o escopo selecionado |
+| Segurança, governança, saúde, custos e arquitetura são analisadas separadamente | Os sinais são agrupados em relatórios e visões consistentes |
+| As conversas sobre modernização dependem de suposições ou de uma descoberta incompleta | Os sinais iniciais de modernização são apoiados por padrões de recursos observados |
+| Detalhes técnicos são difíceis de apresentar para públicos diferentes | Visões executiva, técnica, Excel e arquitetura são geradas em conjunto |
+| A descoberta é manual e inconsistente | A avaliação pode ser repetida usando o mesmo fluxo somente leitura |
+
+### ✨ O Que Diferencia o ATI
+
+O ATI não substitui o Azure Portal, o Azure Resource Graph, o Defender for Cloud,
+o Azure Advisor ou ferramentas especializadas de avaliação. Seu objetivo é fornecer
+uma visão consolidada e repetível dessas fontes e tornar as evidências úteis para
+diferentes públicos.
+
+- **Executivos** obtêm uma visão concisa de risco, postura, footprint e sinais de
+  oportunidade.
+- **Arquitetos e engenheiros** obtêm evidências em nível de recurso, mapeamentos de
+  frameworks e diagramas de arquitetura.
+- **Equipes de segurança e governança** obtêm findings conectados a controles do
+  Azure e à orientação oficial da Microsoft.
+- **Analistas e account teams** obtêm uma linha de base estruturada para descoberta,
+  priorização e conversas de acompanhamento.
+
+### 🛡️ Por Que Confiar nos Resultados
+
+O ATI foi projetado para deixar claros os limites da avaliação:
+
+- **Somente leitura por design:** o ATI não cria, modifica ou exclui recursos Azure.
+- **Fontes oficiais do Azure:** os dados vêm de APIs e serviços oficiais, incluindo
+  Resource Graph, Advisor, Policy, Resource Health, Defender for Cloud e Cost
+  Management quando habilitados e acessíveis.
+- **Saídas baseadas em evidências:** os relatórios mostram contagens de recursos,
+  findings, classificações, referências de frameworks e evidências de suporte.
+- **Sinais inferidos explícitos:** indicadores de modernização e prontidão são
+  identificados como inferidos a partir de padrões de recursos observados.
+- **Resultados dependentes do escopo:** os findings se aplicam apenas às assinaturas,
+  management groups, resource groups e fontes de dados incluídos no scan.
+
+O ATI não certifica conformidade, não substitui uma auditoria formal de segurança e
+não garante prontidão para modernização. Os resultados estabelecem uma base inicial
+de evidências para validação, discussões de arquitetura e priorização.
+
+Para metodologia técnica, fontes de dados, mapeamentos de frameworks, configuração
+e limitações, consulte [DOCUMENTATION.md](./DOCUMENTATION.md).
 
 ---
 
@@ -104,10 +199,10 @@ Service Model — recursos agrupados por IaaS / PaaS / Hybrid / Supporting / Oth
 - **Excel estruturado multi-abas** — uma aba por tipo de recurso com enriquecimento declarativo, a tabela plana `AllResources`, uma aba de navegação **Index** (hyperlinks para todas as abas, com links de retorno por aba), uma coluna **Category** (Azure nativo / Híbrido-Arc / Migrate) e uma seção **Data Collection Notes**.
 - **Relatórios HTML duplos** — Executivo (score de risco, KPIs, cards de recomendações por prioridade, postura Zero Trust) e Técnico (findings por pilar WAF, policy, misconfigs, saúde, recursos deprecados); ambos autocontidos, com seções recolhíveis e tabelas utilizáveis offline.
 - **Diagrama de arquitetura draw.io** — um `.drawio` multi-página com ícones Azure reais: Overview (KPIs + links entre páginas), **Organization** (árvore Tenant → Management Groups → Subscriptions com contagem de recursos), Service Model, Business Pillar, **Network Topology** (VNets/subnets/peering com detecção de peering quebrado), uma página **Network Detail** (recursos dentro das subnets: VMs, private endpoints, firewall, gateways, escudo NSG, nó On-Premises), uma página **Security Posture** (cards de risco por assinatura + badges de severidade nos recursos) e uma página de Recursos por assinatura. Mapa de ícones orientado por configuração com fallback genérico, então novos tipos de recurso do Azure são diagramados automaticamente. Pule com `--no-diagram`.
-- **Mapeamento para pilares WAF** — recomendações do Advisor organizadas por pilar do Well-Architected Framework.
+- **Visibilidade de segurança, governança e frameworks** — organiza findings do Azure Advisor, Policy, Defender for Cloud, Resource Health e regras de configuração em visões alinhadas aos pilares WAF, princípios de landing zone do CAF e conceitos de Zero Trust.
 - **Detecção de misconfiguração baseada em regras** — regras de fontes oficiais mapeadas para princípios Zero Trust.
 - **Conformidade de Policy e detecção de recursos deprecados** — recursos não conformes e correspondências a anúncios oficiais de aposentadoria do Azure.
-- **Avaliação de Modernização & Oportunidade (Cloud)** — *(INFERIDO)* **sinais** de maturidade/adoção por dimensão (Infraestrutura, Aplicação, Banco de Dados, Data Platform, AI, Automação, Segurança, Governança/Landing Zone, Observabilidade) com score 0–100, **confiança** e **evidência**. Mostra indicadores de oportunidade (nunca prescritivo), alinhados a WAF / CAF / ESLZ / AI-Ready / Defender. Aparece como heatmap + cards no relatório Executivo, tabela de evidências no Técnico e aba `ModernizationSignals` no Excel. Config-driven via `config/modernization_signals.yaml`.
+- **Avaliação de Modernização e Oportunidades** — *(INFERIDO)* identifica sinais observáveis de adoção e maturidade em Infraestrutura, Aplicação, Banco de Dados, Data Platform, AI, Automação, Segurança, Governança/Landing Zone e Observabilidade. Ajuda a indicar onde uma descoberta mais profunda pode ser útil, sem prescrever um caminho de migração ou decisão arquitetural. Os sinais incluem confiança, evidências de suporte, indicadores de oportunidade e referências a WAF, CAF, ESLZ, AI-Ready e Defender.
 - **Postura do Defender for Cloud** — habilitação de planos por assinatura, cobertura por recurso de servidores e gap de cobertura com custo para proteger.
 - **100% somente leitura** — dados obtidos exclusivamente de APIs oficiais do Azure (Resource Graph, Advisor, Policy Insights, Resource Health e, opcionalmente, Defender e Cost Management).
 
@@ -489,6 +584,9 @@ Define verificações de configuração para tipos de recurso específicos. Toda
 - **Gráficos requerem internet:** O Chart.js é carregado via CDN. Todas as tabelas de dados são exibidas sem internet.
 - **Apenas ponto no tempo:** O ATI produz snapshots. A análise de tendências requer execuções regulares agendadas.
 - **Sinais de modernização são INFERIDOS:** Nenhuma API oficial do Azure retorna uma pontuação de prontidão para IA ou modernização. O ATI infere esses sinais apenas a partir dos tipos de recurso detectados.
+- **Escopo da avaliação:** O ATI avalia apenas os recursos e fontes de dados acessíveis no escopo selecionado. Permissões RBAC ausentes, coletores ignorados, APIs indisponíveis ou propriedades não suportadas podem tornar a saída incompleta.
+- **Não é uma auditoria formal:** O ATI fornece evidências e sinais de avaliação para descoberta e priorização. Ele não certifica conformidade, postura de segurança, adoção de CAF, alinhamento ao WAF ou prontidão para modernização.
+- **Contexto da aplicação:** Sinais em nível de recurso não determinam sozinhos a arquitetura da aplicação, criticidade de negócio, dívida técnica, complexidade de migração ou prontidão organizacional. Esses aspectos exigem validação com as equipes de aplicação e negócio.
 
 ---
 

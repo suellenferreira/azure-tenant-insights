@@ -1,8 +1,12 @@
-# Azure Tenant Insights — Enhanced Features Documentation
+# Azure Tenant Insights — Technical Documentation
 
-> **Version 3.1** — Items 0-11 Implementation  
-> Last Updated: August 4, 2026  
-> This document complements README.md with detailed methodologies and data sources.
+> **Version:** 3.1
+> **Last Updated:** August 6, 2026
+> **Audience:** Architects, engineers, security and governance teams, contributors, and reviewers
+>
+> This document explains how ATI collects, processes, and presents Azure tenant
+> information. It complements the user-oriented [README.md](./README.md), which
+> explains why and when to run the tool.
 
 ---
 
@@ -20,7 +24,58 @@
 - [Item 9: Resource Classification Taxonomy](#item-9-resource-classification-taxonomy)
 - [Item 10: Architecture Diagrams (draw.io)](#item-10-architecture-diagrams-drawio)
 - [Item 11: Cloud Modernization & Opportunity Assessment](#item-11-cloud-modernization--opportunity-assessment)
+- [How to Use This Document](#how-to-use-this-document)
+- [Assessment Model](#assessment-model)
 - [Data Sources & References](#data-sources--references)
+
+---
+
+## How to Use This Document
+
+This is the technical reference for understanding ATI's methodology and boundaries.
+
+Use it when you need to:
+
+- Validate where a report value comes from;
+- Understand which Azure API or property supports a finding;
+- Review how a classification or signal is calculated;
+- Distinguish observed data, rules-based findings, and inferred signals;
+- Configure or extend ATI;
+- Review limitations before using the output in a customer or executive discussion.
+
+For first-time users, start with the [README.md](./README.md), especially the
+[Why and When to Run ATI](./README.md#why-and-when-to-run-ati) section.
+
+The [TESTING_GUIDE.md](./TESTING_GUIDE.md) is maintained separately for contributors
+and reviewers who need to validate implementation behavior. It is not part of the
+standard end-user reading path.
+
+## Assessment Model
+
+ATI presents three levels of assessment information:
+
+### Observed Data
+
+Information directly collected from official Azure APIs or aggregated from collected
+resources. Examples include resource types and properties, subscription and
+resource-group relationships, regions, Policy states, Advisor recommendations,
+Resource Health events, Defender posture, and Cost Management data when available.
+
+### Rules-Based Findings
+
+Findings produced by applying documented rules to observed data. Examples include
+misconfiguration findings, deprecated resource matches, CAF landing zone
+observations, WAF pillar groupings, and Defender coverage gaps.
+
+### Inferred Signals
+
+Signals derived from resource patterns and classifications. These support discovery
+and prioritization, not definitive claims. Examples include modernization dimension
+scores, cloud-native technology presence, AI/data/integration adoption signals, and
+opportunity indicators.
+
+Inferred signals should be validated against application architecture, business
+requirements, technical constraints, and organizational standards.
 
 ---
 
@@ -679,9 +734,10 @@ Non-prescriptive by design: it surfaces *signals* and *opportunity indicators*, 
 
 ---
 
-## Output Validation Checklist
+## Contributor Validation Checklist
 
-Before deploying in production, validate:
+Use this checklist when changing ATI or reviewing a release. It is not required for
+an initial customer assessment:
 
 - [ ] **Modernization Signals**: Verify detected signals match your actual infrastructure
 - [ ] **Regional Distribution**: Confirm regional aggregation matches expected pattern
@@ -691,6 +747,24 @@ Before deploying in production, validate:
 - [ ] **Metadata**: Verify tenant name and subscriptions display correctly
 - [ ] **Flag Behavior**: Test `--skip-defender` and `--skip-costs` flags
 - [ ] **Diagram**: Open the `*_Diagram.drawio` in draw.io; verify Overview, Organization, Network Topology/Detail, and Security Posture pages
+
+### Interpretation Boundaries
+
+ATI should be used as an evidence-gathering and prioritization tool.
+
+It does not:
+
+- Perform a formal compliance certification;
+- Replace a security audit or penetration test;
+- Determine application architecture from infrastructure alone;
+- Guarantee modernization readiness;
+- Produce a migration business case;
+- Recommend a specific target architecture without additional discovery;
+- Measure business criticality, application dependencies, or organizational readiness.
+
+A high or low signal should be treated as a prompt for further investigation. The
+appropriate next step depends on application context, business priorities, regulatory
+requirements, and the organization's architecture standards.
 
 ---
 
@@ -711,5 +785,5 @@ Before deploying in production, validate:
 ---
 
 **Document Version**: 3.1  
-**Last Updated**: August 4, 2026  
-**Status**: ✅ Complete — Items 0-11 implemented and documented (diagrams + modernization assessment)
+**Last Updated**: August 6, 2026
+**Status**: Technical methodology and interpretation boundaries documented for the current ATI outputs.

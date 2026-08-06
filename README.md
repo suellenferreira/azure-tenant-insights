@@ -11,6 +11,7 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [Why and When to Run ATI](#why-and-when-to-run-ati)
 - [Example Outputs](#example-outputs)
 - [Key Capabilities](#key-capabilities)
 - [Prerequisites](#prerequisites)
@@ -41,6 +42,101 @@ Azure Tenant Insights (ATI) scans an Azure tenant (single or multiple subscripti
 | `*.drawio` | Architects | Multi-page architecture diagram — Overview, Organization, Service Model, Business Pillar, Network Topology, Network Detail, Security Posture, and per-subscription Resources — with real Azure icons; open in [draw.io](https://app.diagrams.net) |
 
 All data is sourced **exclusively from official Azure APIs** — Azure Resource Graph, Azure Advisor, Azure Policy Insights, Resource Health, and optionally Defender for Cloud and Cost Management.
+
+---
+
+## Why and When to Run ATI
+
+Azure environments often contain the information needed for an assessment, but that
+information is distributed across subscriptions, resource types, regions, policies,
+Advisor recommendations, Defender for Cloud, and cost data.
+
+ATI brings these signals together into a read-only assessment that helps teams move
+from:
+
+> "What do we have?"
+
+to:
+
+> "What should we understand, validate, and discuss next?"
+
+ATI helps answer questions such as:
+
+- What Azure resources and services are currently deployed?
+- Where are the main security, governance, health, and compliance signals?
+- How is the environment distributed across subscriptions, regions, service models,
+  and business areas?
+- Which cloud-native, data, AI, integration, or platform capabilities are already
+  present?
+- Where might modernization, optimization, or governance opportunities exist?
+- What evidence should architects, security teams, and account teams investigate
+  further?
+
+### 🧭 When ATI Is Useful
+
+ATI is useful when a team needs an evidence-based baseline for:
+
+- Customer or tenant discovery;
+- Cloud adoption and landing zone assessments;
+- Modernization and application transformation planning;
+- Security and governance posture reviews;
+- Architecture and regional footprint reviews;
+- Subscription consolidation or migration planning;
+- Executive briefings, QBRs, and technical workshops;
+- Periodic snapshots to compare how an Azure environment changes over time.
+
+ATI can be run against a single subscription for a focused assessment or against
+multiple subscriptions when a broader tenant-level view is needed. For a first run,
+scoping the scan to one subscription is recommended.
+
+### 🔎 From Inventory to Insights
+
+| Without ATI | With ATI |
+|---|---|
+| Resource information is spread across subscriptions and Azure services | A consolidated inventory is generated for the selected scope |
+| Security, governance, health, cost, and architecture information is reviewed separately | Signals are grouped into a consistent set of reports and views |
+| Modernization discussions rely mainly on assumptions or incomplete discovery | Initial modernization signals are supported by observed Azure resource patterns |
+| Technical details are difficult to present to different audiences | Executive, technical, Excel, and architecture views are generated together |
+| Discovery is performed manually and inconsistently | The assessment can be repeated using the same read-only workflow |
+
+### ✨ What Makes ATI Different
+
+ATI is not a replacement for Azure Portal, Azure Resource Graph, Defender for
+Cloud, Azure Advisor, or specialized assessment tools. Its purpose is to provide a
+consolidated, repeatable view across these sources and make the collected evidence
+useful for different audiences.
+
+- **Executives** get a concise view of risk, posture, footprint, and opportunity
+  signals.
+- **Architects and engineers** get resource-level evidence, framework mappings, and
+  architecture diagrams.
+- **Security and governance teams** get findings connected to Azure controls and
+  official Microsoft guidance.
+- **Analysts and account teams** get a structured baseline for discovery,
+  prioritization, and follow-up conversations.
+
+### 🛡️ Why the Results Can Be Trusted
+
+ATI is designed to make its assessment boundaries clear:
+
+- **Read-only by design:** ATI does not create, modify, or delete Azure resources.
+- **Official Azure sources:** Data is collected from official Azure APIs and
+  services, including Resource Graph, Advisor, Policy, Resource Health, Defender
+  for Cloud, and Cost Management when enabled and accessible.
+- **Evidence-based outputs:** Reports expose resource counts, findings,
+  classifications, framework references, and supporting evidence rather than
+  presenting unexplained conclusions.
+- **Explicit inferred signals:** Modernization and readiness indicators are labeled
+  as inferred signals based on observed resource patterns.
+- **Scope-aware results:** Findings apply only to the subscriptions, management
+  groups, resource groups, and data sources included in the scan.
+
+ATI does not certify compliance, replace a formal security audit, or guarantee
+modernization readiness. The results are intended to establish an initial evidence
+base for validation, architecture discussions, and prioritization.
+
+For the technical methodology, data sources, framework mappings, configuration
+options, and limitations, see [DOCUMENTATION.md](./DOCUMENTATION.md).
 
 ---
 
@@ -104,8 +200,8 @@ Service Model — resources grouped by IaaS / PaaS / Hybrid / Supporting / Other
 - **Structured multi-sheet Excel** — one sheet per resource type with declarative property enrichment, a flat `AllResources` table, an **Index** navigation sheet (hyperlinks to every tab, with per-sheet back-links), a **Category** column (Azure-native / Hybrid-Arc / Migrate), and a **Data Collection Notes** section.
 - **Dual HTML reports** — an Executive report (risk score, KPIs, priority-colored recommendation cards, Zero Trust posture) and a Technical report (WAF pillar findings, policy, misconfigs, health, deprecated resources); both self-contained, with collapsible sections and offline-friendly tables.
 - **draw.io architecture diagram** — a multi-page `.drawio` with real Azure icons: Overview (KPIs + cross-page links), **Organization** (Tenant → Management Groups → Subscriptions tree with resource counts), Service Model, Business Pillar, **Network Topology** (VNets/subnets/peering with broken-peering detection), a **Network Detail** page (resources placed inside their subnets: VMs, private endpoints, firewall, gateways, NSG shield, On-Premises node), a **Security Posture** page (per-subscription risk cards + severity badges on resources), and one Resources page per subscription. Config-driven icon map with a generic fallback, so new Azure resource types are diagrammed automatically. Skip with `--no-diagram`.
-- **WAF pillar mapping** — Advisor recommendations organized by Well-Architected Framework pillar.
-- **Cloud Modernization & Opportunity assessment** — *(INFERRED)* per-dimension maturity/adoption **signals** (Infrastructure, Application, Database, Data Platform, AI, Automation, Security, Governance/Landing Zone, Observability) scored 0–100 with **confidence** and **evidence**. Surfaces opportunity indicators (never prescriptive), aligned to WAF / CAF / ESLZ / AI-Ready / Defender. Shown as a heatmap + cards in the Executive report, an evidence table in the Technical report, and a `ModernizationSignals` Excel sheet. Config-driven via `config/modernization_signals.yaml`.
+- **Security, governance, and framework visibility** — organizes findings from Azure Advisor, Policy, Defender for Cloud, Resource Health, and configuration rules into views aligned with WAF pillars, CAF landing zone principles, and Zero Trust concepts.
+- **Cloud Modernization & Opportunity assessment** — *(INFERRED)* identifies observable adoption and maturity signals across Infrastructure, Application, Database, Data Platform, AI, Automation, Security, Governance/Landing Zone, and Observability. It helps teams identify where deeper discovery may be valuable, without prescribing a migration path or architectural decision. Signals include confidence, supporting evidence, opportunity indicators, and references to WAF, CAF, ESLZ, AI-Ready, and Defender guidance.
 - **Rules-based misconfiguration detection** — official-source rules mapped to Zero Trust principles.
 - **Policy compliance & deprecated-resource detection** — non-compliant resources and matches against official Azure retirement announcements.
 - **Defender for Cloud posture** — plan enablement per subscription, per-resource server coverage, and coverage-gap cost-to-protect.

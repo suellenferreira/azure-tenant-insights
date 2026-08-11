@@ -22,6 +22,7 @@ import logging
 from collections import Counter
 from typing import Any, Dict, List
 
+from processors.resiliency import build_resiliency_assessment
 from writers.safety import html_escape, html_safe_data
 
 
@@ -95,6 +96,7 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
 
     # Sections
     inventory_html = _inventory_section(summary)
+    technical_categories_html = _build_technical_categories_section(resources_by_type)
     waf_html = _waf_section(waf_findings)
     policy_summary_html = _policy_summary_section(policy_data)
     policy_html = _table_section(policy_data, [
@@ -103,7 +105,7 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
         ("policyDefinitionAction", "Effect"),
         ("complianceState", "State"),
         ("subscriptionId", "Subscription"), ("resourceGroup", "RG"),
-    ], table_id="tbl-policy")
+    ], table_id="tbl-policy", paginate=10)
     misconfig_html = _misconfig_table(misconfig_findings)
     health_html = _health_section(health_data)
     deprecated_html = _deprecated_table(deprecated)
@@ -136,7 +138,7 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
             ("name", "Name"), ("type", "Type"),
             ("location", "Location"), ("resourceGroup", "RG"),
             ("subscriptionId", "Subscription"),
-        ])
+        ], table_id="tbl-arc", paginate=10)
         arc_section = f"""<div class="section" id="arc">
             <h2>🌐 Azure Arc Resources <span class="cnt">{len(arc_resources)}</span></h2>
             <p class="note">Hybrid and on-premises resources registered via Azure Arc.</p>
@@ -150,6 +152,9 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
 
     # Item 3: Regional distribution analysis
     region_summary = _analyze_regions(resources_by_type)
+
+    resiliency = build_resiliency_assessment(scan_data)
+    resiliency_html = _build_resiliency_technical_html(resiliency)
 
     # Item 0: Build collection warnings note for report footer
     collection_warnings = scan_data.get("collection_warnings", [])
@@ -176,13 +181,14 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
     html = _render_html(
         scan_date=scan_date, tenant_id=tenant_id, tenant_name=tenant_name,
         subscriptions_list=sub_list, summary=summary,
-        inventory_html=inventory_html, waf_html=waf_html,
+        inventory_html=inventory_html, technical_categories_html=technical_categories_html, waf_html=waf_html,
         policy_html=policy_html, policy_summary_html=policy_summary_html,
         misconfig_html=misconfig_html,
         health_html=health_html, deprecated_html=deprecated_html,
         lz_html=lz_html, defender_section=defender_section,
         zerotrust_html=zerotrust_html,
         arc_section=arc_section, modernization_detail_html=modernization_detail_html,
+        resiliency_html=resiliency_html,
         region_summary=region_summary,
         sub_labels=sub_labels, sub_values=sub_values,
         sev_labels=sev_labels, sev_values=sev_values,
@@ -203,7 +209,7 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
 # Section builders
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _table_section(data: list, columns: list, max_rows: int = 400, table_id: str = "") -> str:
+def _table_section(data: list, columns: list, max_rows: int = 400, table_id: str = "", paginate: int | None = None) -> str:
     if not data:
         return '<div class="table-scroll"><p class="no-data">No records found.</p></div>'
 
@@ -212,6 +218,8 @@ def _table_section(data: list, columns: list, max_rows: int = 400, table_id: str
 
     thead_hdr = "".join(f"<th>{lbl}</th>" for lbl in col_labels)
     tbl_id_attr = f' id="{table_id}"' if table_id else ""
+    if paginate and table_id:
+        tbl_id_attr += f' data-paginate="{paginate}" data-page-step="{paginate}"'
     filter_row = ""
     if table_id:
         filter_inputs = "".join(
@@ -296,7 +304,7 @@ def _health_section(health_data: list) -> str:
         ("summary", "Summary"), ("reasonType", "Reason"),
         ("occurredTime", "Occurred"),
         ("subscriptionId", "Subscription"), ("resourceGroup", "RG"),
-    ], table_id="tbl-health")
+    ], table_id="tbl-health", paginate=10)
 
 
 def _misconfig_table(findings: list) -> str:
@@ -339,7 +347,7 @@ def _misconfig_table(findings: list) -> str:
 
     hdr_row = "".join(f"<th>{h}</th>" for h in _HEADERS)
     return f"""<div style="margin:.3rem 0 .7rem"><strong style="font-size:.82rem;color:#1F4E79">Totals by Severity:</strong> {sev_summary}</div>
-    <div class="table-scroll"><table class="dtable" id="tbl-misconfig">
+    <div class="table-scroll"><table class="dtable" id="tbl-misconfig" data-paginate="10" data-page-step="10">
         <thead><tr>{hdr_row}</tr><tr class="filter-row">{filter_row}</tr></thead>
         <tbody>{rows}</tbody></table></div>"""
 
@@ -391,7 +399,7 @@ def _inventory_section(summary: dict) -> str:
         for i, h in enumerate(_HEADERS)
     )
     hdr_row = "".join(f"<th>{h}</th>" for h in _HEADERS)
-    return f"""<div class="table-scroll"><table class="dtable" id="tbl-inventory">
+    return f"""<div class="table-scroll"><table class="dtable" id="tbl-inventory" data-paginate="10" data-page-step="10">
         <thead><tr>{hdr_row}</tr><tr class="filter-row">{filter_row}</tr></thead>
         <tbody>{rows}</tbody></table></div>"""
 
@@ -466,7 +474,7 @@ def _waf_section(waf_findings: dict) -> str:
             f'<strong style="color:{color}">{icon} {pillar}</strong>'
             f' — {count} Azure Advisor recommendation(s) '
             f'<span style="margin-left:.5rem;color:#555;font-size:.79rem">({impacts_txt})</span></div>'
-            f'<div class="table-scroll"><table class="dtable" id="{waf_tid}" data-paginate="30" data-page-step="30">'
+            f'<div class="table-scroll"><table class="dtable" id="{waf_tid}" data-paginate="15" data-page-step="15">'
             f'<thead><tr><th>Impact</th><th>Resource Type</th><th>Resource</th>'
             f'<th>Recommendation</th><th>Subscription</th><th>RG</th></tr>'
             f'{waf_filter_row}</thead>'
@@ -1095,7 +1103,7 @@ def _build_defender_posture_section_html(
         f'<p class="note" style="margin:.3rem 0 .5rem">Subscription-level plan enablement '
         f'(<code>Microsoft.Security/pricings</code>). For non-server workloads, status is '
         f'reported at the subscription scope only.</p>'
-        f'<div class="table-scroll"><table class="dtable" id="tbl-defender-plans">'
+        f'<div class="table-scroll"><table class="dtable" id="tbl-defender-plans" data-paginate="10" data-page-step="10">'
         f'<thead><tr><th>Subscription</th><th>Subscription ID</th><th>Defender Plan</th>'
         f'<th>Tier</th><th>Sub-plan</th><th>Coverage</th><th>Enabled Extensions</th></tr>'
         f'{plan_filter_row}</thead>'
@@ -1132,7 +1140,7 @@ def _build_defender_posture_section_html(
             f'(the only workloads with resource-level coverage in the pricings API). '
             f'Coverage is derived from the Defender for Servers plan tier of each subscription; '
             f'where coverage status is <em>PartiallyCovered</em>, individual VM-level overrides may apply.</p>'
-            f'<div class="table-scroll"><table class="dtable">'
+            f'<div class="table-scroll"><table class="dtable" id="tbl-defender-servers" data-paginate="10" data-page-step="10">'
             f'<thead><tr><th>Resource</th><th>Type</th><th>Status</th><th>Plan Tier</th>'
             f'<th>Sub-plan</th><th>Location</th><th>RG</th><th>Subscription</th></tr></thead>'
             f'<tbody>{srv_rows}</tbody></table></div></div>'
@@ -1276,7 +1284,7 @@ def _build_defender_section_html(defender_data: list, resources_by_type: dict) -
         ("implementationEffort", "Effort"), ("resourceDetails", "Resource"),
         ("subscriptionId", "Subscription"), ("resourceGroup", "RG"),
         ("remediationDescription", "Remediation"),
-    ], table_id="tbl-defender")
+    ], table_id="tbl-defender", paginate=5)
 
     cat_table = (
         f'<div style="margin:1.2rem 0">'
@@ -1653,11 +1661,245 @@ def _build_modernization_tech_html(assessment: dict) -> str:
       </script>"""
 
 
+def _build_resiliency_technical_html(assessment: dict) -> str:
+        if not assessment or not assessment.get("available"):
+                return '<p class="no-data">Resiliency posture data is not available.</p>'
+
+        env = assessment.get("environment", {})
+        ev = assessment.get("evidence", {})
+        s = assessment.get("summary", {})
+
+        # Build cross-tabulated tables for Service Model and Business Pillar x Region
+        region_data = env.get("region_distribution") or []
+
+        # Collect all unique classification dimensions across active regions.
+        all_service_models = set()
+        all_business_pillars = set()
+        all_technical_categories = set()
+        for r in region_data:
+            all_service_models.update((r.get("service_models") or {}).keys())
+            all_business_pillars.update((r.get("business_pillars") or {}).keys())
+            all_technical_categories.update((r.get("technical_categories") or {}).keys())
+
+        # Sort them
+        sorted_service_models = sorted(all_service_models)
+        sorted_business_pillars = sorted(all_business_pillars)
+        sorted_technical_categories = sorted(all_technical_categories)
+
+        # Service Model x Region table
+        region_list = [r.get("region", "") for r in region_data]
+        region_dict = {r.get("region", ""): r for r in region_data}
+
+        service_model_header = "<table class='dtable'><thead><tr><th>Service Model</th>"
+        for region in region_list:
+            service_model_header += f"<th>{region}</th>"
+        service_model_header += "</tr></thead><tbody>"
+
+        service_model_rows = ""
+        for model in sorted_service_models:
+            service_model_rows += f"<tr><td><strong>{model}</strong></td>"
+            for region in region_list:
+                count = region_dict.get(region, {}).get("service_models", {}).get(model, 0)
+                service_model_rows += f"<td class='num'>{count}</td>"
+            service_model_rows += "</tr>"
+
+        service_model_table = service_model_header + service_model_rows + "</tbody></table>"
+
+        # Business Pillar x Region table
+        business_pillar_header = "<table class='dtable'><thead><tr><th>Business Pillar</th>"
+        for region in region_list:
+            business_pillar_header += f"<th>{region}</th>"
+        business_pillar_header += "</tr></thead><tbody>"
+
+        business_pillar_rows = ""
+        for pillar in sorted_business_pillars:
+            business_pillar_rows += f"<tr><td><strong>{pillar}</strong></td>"
+            for region in region_list:
+                count = region_dict.get(region, {}).get("business_pillars", {}).get(pillar, 0)
+                business_pillar_rows += f"<td class='num'>{count}</td>"
+            business_pillar_rows += "</tr>"
+
+        business_pillar_table = business_pillar_header + business_pillar_rows + "</tbody></table>"
+
+        technical_category_header = "<table class='dtable'><thead><tr><th>Technical Category</th>"
+        for region in region_list:
+            technical_category_header += f"<th>{region}</th>"
+        technical_category_header += "</tr></thead><tbody>"
+
+        technical_category_rows = ""
+        for category in sorted_technical_categories:
+            technical_category_rows += f"<tr><td><strong>{category}</strong></td>"
+            for region in region_list:
+                count = region_dict.get(region, {}).get("technical_categories", {}).get(category, 0)
+                technical_category_rows += f"<td class='num'>{count}</td>"
+            technical_category_rows += "</tr>"
+
+        technical_category_table = technical_category_header + technical_category_rows + "</tbody></table>"
+
+        evidence_rows = "".join(
+                f'<tr><td>{label}</td><td>{item.get("status", "")}</td>'
+                f'<td class="num">{item.get("detected") if item.get("detected") is not None else "N/A"}</td>'
+                f'<td class="num">{item.get("evaluated_resources") if item.get("evaluated_resources") is not None else "N/A"}</td>'
+                f'<td>{item.get("scope", "")}</td><td style="font-size:.78rem;color:#666">{item.get("limitation", "")}</td></tr>'
+                for label, item in [
+                ("Multi-region coverage (region count)", ev.get("multi_region", {})),
+                ("Multi-zone resources detected (resource count)", ev.get("zone", {})),
+                ]
+        )
+
+        # Region labels for donut chart (top 5)
+        top_regions = (env.get("region_distribution") or [])[:5]
+        region_labels_json = ", ".join([f'"{r.get("region", "")}"' for r in top_regions])
+        region_values_json = ", ".join([str(r.get("resources", 0)) for r in top_regions])
+
+        # Business Snapshot table rows (top 5 regions — mirrors Executive report format)
+        snapshot_rows = "".join(
+            f'<tr><td>{r.get("region", "")}</td><td class="num">{r.get("resources", 0):,}</td><td class="num">{r.get("percentage", 0)}%</td></tr>'
+            for r in top_regions
+        ) or '<tr><td colspan="3" class="no-data">No regional evidence available.</td></tr>'
+
+        return f"""
+        <div class="section" id="resiliency-technical">
+            <h2>🧭 Resiliency Posture — Technical Evidence
+                <small style="font-size:.72rem;color:#888;font-weight:normal;margin-left:.5rem">(Observed from inventory)</small>
+            </h2>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem;margin-bottom:.8rem">
+                <div class="mod-chip"><div class="chip-val">{env.get("regional_resources", 0):,}</div><div class="chip-lbl">Regional Resources</div></div>
+                <div class="mod-chip"><div class="chip-val">{env.get("regions", 0)}</div><div class="chip-lbl">Active Regions</div></div>
+                <div class="mod-chip"><div class="chip-val">{s.get("single_region_exposure_pct", 0)}%</div><div class="chip-lbl">Top Region Exposure</div></div>
+                <div class="mod-chip"><div class="chip-val">{s.get("zone_signal_count", 0)}</div><div class="chip-lbl">Multi-zone Signals</div></div>
+            </div>
+
+            <details style="margin:.5rem 0;border:1px solid #e6eef7;border-radius:8px;padding:.55rem .8rem" open>
+                <summary style="cursor:pointer;font-weight:700;color:#1F4E79">📋 Service Model Definitions</summary>
+                <div style="margin-top:.5rem;font-size:.85rem;color:#555;line-height:1.6">
+                    <p><strong>Hybrid:</strong> Arc, VMware, Azure Stack, and cross-environment management.</p>
+                    <p><strong>Supporting Services:</strong> Shared security, operations, governance, and monitoring services.</p>
+                    <p><strong>Other:</strong> Unclassified or third-party / Marketplace resource types; not necessarily a concern.</p>
+                </div>
+            </details>
+
+            <details style="margin:.5rem 0;border:1px solid #e6eef7;border-radius:8px;padding:.55rem .8rem" open>
+                <summary style="cursor:pointer;font-weight:700;color:#1F4E79">🌍 Regional Distribution & Business Snapshot</summary>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;margin-top:.8rem;align-items:start">
+                    <div>
+                        <h3 style="font-size:.95rem;color:#1F4E79;margin-bottom:.6rem">Top 5 Regions (Donut)</h3>
+                        <div style="height:280px;">
+                            <canvas id="regionDonut"></canvas>
+                        </div>
+                        <script>(function(){{
+                            var ctx = document.getElementById('regionDonut');
+                            if (ctx) {{
+                                new Chart(ctx.getContext('2d'), {{
+                                    type: 'doughnut',
+                                    data: {{
+                                        labels: [{region_labels_json}],
+                                        datasets: [{{
+                                            data: [{region_values_json}],
+                                            backgroundColor: ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D', '#6A994E']
+                                        }}]
+                                    }},
+                                    options: {{
+                                        responsive: true,
+                                        maintainAspectRatio: true,
+                                        plugins: {{
+                                            legend: {{position: 'bottom'}}
+                                        }}
+                                    }}
+                                }});
+                            }}
+                        }})();
+                        </script>
+                    </div>
+                    <div>
+                        <h3 style="font-size:.95rem;color:#1F4E79;margin-bottom:.6rem">Business Snapshot</h3>
+                        <div class="table-scroll">
+                            <table class="dtable">
+                                <thead><tr><th>Top Region</th><th class="num">Resources</th><th class="num">Exposure</th></tr></thead>
+                                <tbody>{snapshot_rows}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <details open style="margin:.5rem 0;border:1px solid #e6eef7;border-radius:8px;padding:.55rem .8rem">
+                <summary style="cursor:pointer;font-weight:700;color:#1F4E79">Resiliency Snapshot by Service Model</summary>
+                <div class="table-scroll" style="margin-top:.5rem">{service_model_table}</div>
+            </details>
+
+            <details style="margin:.5rem 0;border:1px solid #e6eef7;border-radius:8px;padding:.55rem .8rem">
+                <summary style="cursor:pointer;font-weight:700;color:#1F4E79">Resiliency Snapshot by Business Pillar</summary>
+                <div class="table-scroll" style="margin-top:.5rem">{business_pillar_table}</div>
+            </details>
+
+            <details style="margin:.5rem 0;border:1px solid #e6eef7;border-radius:8px;padding:.55rem .8rem">
+                <summary style="cursor:pointer;font-weight:700;color:#1F4E79">Resiliency Snapshot by Technical Category</summary>
+                <div class="table-scroll" style="margin-top:.5rem">{technical_category_table}</div>
+            </details>
+
+            <details style="margin:.5rem 0;border:1px solid #e6eef7;border-radius:8px;padding:.55rem .8rem">
+                <summary style="cursor:pointer;font-weight:700;color:#1F4E79">Resiliency Evidence Matrix</summary>
+                <div class="table-scroll" style="margin-top:.5rem"><table class="dtable"><thead><tr><th>Dimension</th><th>Status</th><th class="num">Detected</th><th class="num">Evaluated</th><th>Scope</th><th>Limitation</th></tr></thead><tbody>{evidence_rows}</tbody></table></div>
+                <p style="font-size:.78rem;color:#777;margin-top:.5rem">{assessment.get("notes", {}).get("zone_metric", "")}</p>
+            </details>
+
+            <details style="margin:.5rem 0;border:1px solid #e6eef7;border-radius:8px;padding:.55rem .8rem">
+                <summary style="cursor:pointer;font-weight:700;color:#1F4E79">Interpretation Boundaries</summary>
+                <div style="margin-top:.5rem;font-size:.82rem;color:#555">
+                    <p>{assessment.get("notes", {}).get("scope_boundary", "")}</p>
+                    <p>{assessment.get("notes", {}).get("interpretation", "")}</p>
+                </div>
+            </details>
+        </div>
+        """
+
+
+def _build_technical_categories_section(resources_by_type: dict) -> str:
+    """
+    Generate a section showing the Top 5 Technical Categories by resource count,
+    with paginatio for viewing additional categories via 'Load More'.
+    """
+    from processors.classifier import classify_resource_type
+    from collections import Counter
+
+    # Aggregate resources by technical_category
+    category_counts: Counter = Counter()
+    for rtype, resources in resources_by_type.items():
+        _cls = classify_resource_type(rtype)
+        category = _cls.get("technical_category", "Other")
+        category_counts[category] += len(resources)
+
+    # Sort by count descending
+    sorted_categories = sorted(category_counts.items(), key=lambda x: -x[1])
+
+    if not sorted_categories:
+        return '<div class="section" id="technical-categories"><h2>📊 Technical Category Distribution</h2><p class="no-data">No technical categories detected.</p></div>'
+
+    # Build table rows
+    rows = ""
+    for category, count in sorted_categories:
+        rows += f'<tr><td>{category}</td><td class="num">{count:,}</td></tr>'
+
+    # Create table with paginat ion (5 initial + load more)
+    hdr = '<tr><th>Technical Category</th><th class="num">Resource Count</th></tr>'
+    table_html = f'''<div class="table-scroll"><table class="dtable" id="tbl-technical-categories" data-paginate="5" data-page-step="5">
+        <thead>{hdr}</thead>
+        <tbody>{rows}</tbody>
+    </table></div>'''
+
+    return f'''<div class="section" id="technical-categories">
+        <h2>📊 Technical Category Distribution <span class="cnt">{len(sorted_categories)}</span></h2>
+        <p class="note">Granular resource classification by detailed technical category (e.g., "Compute - Containers - Registry" vs. "Compute - Virtual Machines").</p>
+        {table_html}
+    </div>'''
+
+
 def _render_html(
     scan_date, tenant_id, tenant_name, subscriptions_list, summary,
-    inventory_html, waf_html, policy_html, policy_summary_html, misconfig_html,
+    inventory_html, technical_categories_html, waf_html, policy_html, policy_summary_html, misconfig_html,
     health_html, deprecated_html, lz_html,
-    defender_section, zerotrust_html, arc_section, modernization_detail_html, region_summary,
+    defender_section, zerotrust_html, arc_section, modernization_detail_html, resiliency_html, region_summary,
     sub_labels, sub_values, sev_labels, sev_values,
     has_defender, has_arc,
     policy_count, misconfig_count, health_count,
@@ -1667,6 +1909,29 @@ def _render_html(
     kpi = summary
     def_nav = '<a href="#defender">🔒 Defender for Cloud</a>' if has_defender else ""
     arc_nav = '<a href="#arc">🌐 Azure Arc</a>' if has_arc else ""
+
+    # Overall risk level — computed centrally in processors/summary.py
+    # (percentage-based: <5% LOW, 5-20% MEDIUM, 20-30% HIGH, >30% CRITICAL)
+    risk_level = summary.get("risk_level", "LOW")
+    risk_color = summary.get("risk_color", "#70AD47")
+    risk_pct = summary.get("critical_findings_pct", 0)
+    risk_tooltip_html = (
+        '<details style="margin:.4rem auto 1rem;max-width:640px;font-size:.78rem;color:#888;text-align:left;'
+        'border:1px solid #e6eef7;border-radius:8px;padding:.4rem .8rem;background:#fafcff">'
+        '<summary style="cursor:pointer;color:#2E86AB;font-weight:600;text-align:center">'
+        '&#9432; How is this classification calculated?</summary>'
+        '<div style="margin-top:.5rem;line-height:1.6">'
+        f'<p><strong>Current:</strong> {risk_pct}% critical findings '
+        f'({kpi.get("critical_findings_count", 0)} of {kpi.get("total_resources", 0):,} resources) '
+        f'&rarr; <strong style="color:{risk_color}">{risk_level}</strong></p>'
+        '<p style="margin-top:.4rem"><strong>Thresholds</strong> (% of critical findings vs. total resources):</p>'
+        '<p>&#9679; <strong style="color:#70AD47">LOW</strong> &lt; 5% &nbsp;'
+        '&#9679; <strong style="color:#FFC000">MEDIUM</strong> 5&ndash;20% &nbsp;'
+        '&#9679; <strong style="color:#C00000">HIGH</strong> 20&ndash;30% &nbsp;'
+        '&#9679; <strong style="color:#7B0000">CRITICAL</strong> &gt; 30%</p>'
+        '<p style="margin-top:.4rem;color:#999">Critical findings = High/Critical misconfigurations + High-severity Defender assessments.</p>'
+        '</div></details>'
+    )
 
     # Item 3: Regional distribution table
     region_rows = "".join(
@@ -1754,6 +2019,7 @@ summary.mod-h3:hover{{color:#2E86AB}}
 .num{{text-align:right;font-variant-numeric:tabular-nums}}
 .mono{{font-family:monospace;font-size:.78rem}}
 .cnt{{display:inline-block;background:#2E86AB;color:#fff;border-radius:12px;padding:.1rem .5rem;font-size:.75rem;margin-left:.4rem}}
+.risk-banner{{padding:1rem 1.5rem;border-radius:10px;text-align:center;font-size:1.1rem;font-weight:700;color:#fff;margin:1rem 0;background:{risk_color}}}
 .kpi-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin:.8rem 0}}
 .kpi-card{{background:#f8faff;border-radius:10px;padding:1.1rem;text-align:center;border-top:3px solid #2E86AB}}
 .kpi-val{{font-size:2rem;font-weight:700;color:#1F4E79}}
@@ -1792,10 +2058,12 @@ summary.mod-h3:hover{{color:#2E86AB}}
   <div class="sidebar-logo">⚡ ATI Technical</div>
       <h3>Overview</h3>
   <a href="#inventory">📦 Resource Inventory</a>
+  <a href="#technical-categories">📊 Technical Categories</a>
   {arc_nav}
   <a href="#regions">🌍 Regional Distribution</a>
   <h3>Modernization</h3>
   <a href="#modernization">🚀 Modernization Signals</a>
+    <a href="#resiliency">🧭 Resiliency Posture</a>
   <h3>Infrastructure</h3>
   <a href="#lz">🏗 Landing Zone</a>
   <h3>WAF Analysis</h3>
@@ -1824,6 +2092,8 @@ summary.mod-h3:hover{{color:#2E86AB}}
   </div>
   <div class="container">
     <div class="ctrl-bar"><button class="ctrl-btn" onclick="expandAll()">&#8862; Expand All</button><button class="ctrl-btn" onclick="collapseAll()">&#8863; Collapse All</button></div>
+    <div class="risk-banner">Overall Environment Risk Level: {risk_level}</div>
+    <div style="text-align:center">{risk_tooltip_html}</div>
 
     <!-- KPIs + Charts -->
     <div class="section">
@@ -1848,6 +2118,8 @@ summary.mod-h3:hover{{color:#2E86AB}}
       {inventory_html}
     </div>
 
+    {technical_categories_html}
+
     {arc_section}
 
     <div class="section" id="regions">
@@ -1870,6 +2142,14 @@ summary.mod-h3:hover{{color:#2E86AB}}
       <p class="note">Per-dimension maturity/adoption signals with the supporting resources and the scoring method used. Low-confidence rows indicate weak evidence — validate against your architecture.</p>
       {modernization_detail_html}
     </div>
+
+        <div class="section" id="resiliency">
+            <h2>🧭 Resiliency Posture — Technical Evidence
+                <small style="font-size:.7rem;color:#888;font-weight:normal;margin-left:.5rem">(Observed evidence)</small>
+            </h2>
+            <p class="note">Cross-subscription resiliency indicators combining regional distribution and multi-zone hints. Workload-level backup protection validation is outside the scope of this resiliency posture view.</p>
+            {resiliency_html}
+        </div>
 
     <div class="section" id="lz">
       <h2>🏗 Landing Zone Observations

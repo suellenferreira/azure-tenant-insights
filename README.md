@@ -36,12 +36,18 @@ Azure Tenant Insights (ATI) scans an Azure tenant (single or multiple subscripti
 
 | Output | Audience | Contents |
 |---|---|---|
-| `*_Inventory.xlsx` | All teams | Structured, multi-sheet Excel inventory organized by resource type |
-| `*_Executive.html` | C-Level / Stakeholders | Risk score, KPIs, strategic recommendations, modernization signals |
-| `*_Technical.html` | Engineers / Architects | WAF pillar findings, policy violations, misconfigs, health, deprecated resources |
+| `*_Inventory.xlsx` | All teams | Structured, multi-sheet Excel inventory organized by resource type, including an Overview snapshot of regional and multi-zone configuration signals |
+| `*_Executive.html` | C-Level / Stakeholders | Risk score, KPIs, strategic recommendations, modernization signals, and resiliency posture observations |
+| `*_Technical.html` | Engineers / Architects | WAF pillar findings, policy violations, misconfigs, health, deprecated resources, and detailed regional/multi-zone resiliency analysis |
 | `*.drawio` | Architects | Multi-page architecture diagram — Overview, Organization, Service Model, Business Pillar, Network Topology, Network Detail, Security Posture, and per-subscription Resources — with real Azure icons; open in [draw.io](https://app.diagrams.net) |
 
 All data is sourced **exclusively from official Azure APIs** — Azure Resource Graph, Azure Advisor, Azure Policy Insights, Resource Health, and optionally Defender for Cloud and Cost Management.
+
+The resiliency posture view reflects resource properties observed in Azure Resource Graph inventory only. It includes:
+- Regional distribution (which regions contain resources)
+- Multi-zone configuration signals (which resources expose zone properties)
+
+It does NOT include workload-level backup protection validation, operational backup health, or service-specific architecture details.
 
 ---
 
@@ -199,8 +205,9 @@ Service Model — resources grouped by IaaS / PaaS / Hybrid / Supporting / Other
 ## Key Capabilities
 
 - **Dynamic resource-type coverage** — every resource type in the tenant is discovered and captured automatically. New Azure types are handled generically (no code change); per-type enrichment is optional and additive via `config/resource_enrichment.yaml`.
-- **Structured multi-sheet Excel** — one sheet per resource type with declarative property enrichment, a flat `AllResources` table, an **Index** navigation sheet (hyperlinks to every tab, with per-sheet back-links), a **Category** column (Azure-native / Hybrid-Arc / Migrate), and a **Data Collection Notes** section.
-- **Dual HTML reports** — an Executive report (risk score, KPIs, priority-colored recommendation cards, Zero Trust posture) and a Technical report (WAF pillar findings, policy, misconfigs, health, deprecated resources); both self-contained, with collapsible sections and offline-friendly tables.
+- **Granular resource classification** — *(Phase 3A)* Resources are now classified with sub-namespace refinement (e.g., Azure Container Registry distinguished as "Registry" vs. "Registry Replication"). Technical categories appear in the Excel `AllResources` sheet (`Detailed Technical Category` column) and are visualized in the Technical HTML report's new "📊 Technical Category Distribution" section (top 5 by resource count with pagination).
+- **Structured multi-sheet Excel** — one sheet per resource type with declarative property enrichment, a flat `AllResources` table (now with `Detailed Technical Category` column for refined classification analysis), an **Index** navigation sheet (hyperlinks to every tab, with per-sheet back-links), a **Category** column (Azure-native / Hybrid-Arc / Migrate), and a **Data Collection Notes** section.
+- **Dual HTML reports** — an Executive report (risk score, KPIs, priority-colored recommendation cards, Zero Trust posture) and a Technical report (WAF pillar findings, policy, misconfigs, health, deprecated resources, + new **Technical Category Distribution** section); both self-contained, with collapsible sections, pagination for large tables (5–10 initial rows + "Load More" button), and offline-friendly tables.
 - **draw.io architecture diagram** — a multi-page `.drawio` with real Azure icons: Overview (KPIs + cross-page links), **Organization** (Tenant → Management Groups → Subscriptions tree with resource counts), Service Model, Business Pillar, **Network Topology** (VNets/subnets/peering with broken-peering detection), a **Network Detail** page (resources placed inside their subnets: VMs, private endpoints, firewall, gateways, NSG shield, On-Premises node), a **Security Posture** page (per-subscription risk cards + severity badges on resources), and one Resources page per subscription. Config-driven icon map with a generic fallback, so new Azure resource types are diagrammed automatically. Skip with `--no-diagram`.
 - **Security, governance, and framework visibility** — organizes findings from Azure Advisor, Policy, Defender for Cloud, Resource Health, and configuration rules into views aligned with WAF pillars, CAF landing zone principles, and Zero Trust concepts.
 - **Cloud Modernization & Opportunity assessment** — *(INFERRED)* identifies observable adoption and maturity signals across Infrastructure, Application, Database, Data Platform, AI, Automation, Security, Governance/Landing Zone, and Observability. It helps teams identify where deeper discovery may be valuable, without prescribing a migration path or architectural decision. Signals include confidence, supporting evidence, opportunity indicators, and references to WAF, CAF, ESLZ, AI-Ready, and Defender guidance.

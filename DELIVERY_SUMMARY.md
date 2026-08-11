@@ -1,16 +1,16 @@
-# Azure Tenant Insights v2.0 — Delivery Summary
+# Azure Tenant Insights v1.0.0 — Phase 3A Delivery Summary
 
 **Project:** Azure Tenant Insights (ATI)  
-**Version:** 2.0  
-**Delivery Date:** June 16, 2026  
-**Status:** ✅ COMPLETE & DOCUMENTED  
-**Next Step:** Integration Testing
+**Version:** 1.0.0  
+**Delivery Date:** August 11, 2026  
+**Status:** ✅ Pillar classification and resiliency reporting enhancements complete  
+**Next Step:** Integration testing and pull-request review; advanced logs instrumentation remains on hold
 
 ---
 
 ## Executive Summary
 
-Azure Tenant Insights v2.0 has been successfully enhanced with **7 major features (Items 0-6)** designed to provide comprehensive Azure infrastructure analysis, cost optimization recommendations, and Cloud Adoption Framework (CAF) alignment guidance.
+Azure Tenant Insights v1.0.0 now includes Phase 3A classification refinement and resiliency reporting, together with the post-scan report usability adjustments. The current delivery preserves the evidence-based assessment model while making detailed technical categories visible across HTML and Excel outputs.
 
 ### What Was Delivered
 

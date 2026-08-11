@@ -36,12 +36,18 @@ Azure Tenant Insights (ATI) analiza un tenant de Azure (suscripciones únicas o 
 
 | Salida | Audiencia | Contenido |
 |---|---|---|
-| `*_Inventory.xlsx` | Todos los equipos | Inventario Excel estructurado y multi-hoja, organizado por tipo de recurso |
-| `*_Executive.html` | C-Level / Interesados | Puntuación de riesgo, KPIs, recomendaciones estratégicas, señales de modernización |
-| `*_Technical.html` | Ingenieros / Arquitectos | Hallazgos por pilar WAF, violaciones de policy, misconfigs, salud, recursos deprecados |
+| `*_Inventory.xlsx` | Todos los equipos | Inventario Excel estructurado y multi-hoja, organizado por tipo de recurso, incluyendo en Overview un snapshot de señales regionales y de configuración multi-zona |
+| `*_Executive.html` | C-Level / Interesados | Puntuación de riesgo, KPIs, recomendaciones estratégicas, señales de modernización y observaciones de postura de resiliencia |
+| `*_Technical.html` | Ingenieros / Arquitectos | Hallazgos por pilar WAF, violaciones de policy, misconfigs, salud, recursos deprecados y análisis técnico regional/multi-zona de resiliencia |
 | `*.drawio` | Arquitectos | Diagrama de arquitectura multipágina — Overview, Organization, Service Model, Business Pillar, Network Topology, Network Detail, Security Posture y Recursos por suscripción — con iconos Azure reales; abra en [draw.io](https://app.diagrams.net) |
 
 Todos los datos se obtienen **exclusivamente de APIs oficiales de Azure** — Azure Resource Graph, Azure Advisor, Azure Policy Insights, Resource Health y, opcionalmente, Defender for Cloud y Cost Management.
+
+La vista de postura de resiliencia refleja solo las propiedades de recursos observadas en el inventario de Azure Resource Graph. Incluye:
+- Distribución regional (qué regiones contienen recursos)
+- Señales de configuración multi-zona (qué recursos exponen propiedades de zona)
+
+No incluye validación de protección de backup a nivel de carga de trabajo, estado operativo de backup o detalles de arquitectura específicos del servicio.
 
 ---
 

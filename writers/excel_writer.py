@@ -65,7 +65,7 @@ SHEET_WARN_HARD = _env_int("ATI_SHEET_WARN_HARD", 200)
 
 # Fixed sheet names — reserved so type sheets never collide with them.
 RESERVED_SHEET_NAMES = {
-    "Overview", "Index", "Classification", "ModernizationSignals", "Subscriptions",
+    "Overview", "Index", "Classification", "ModernizationSignals", "ResiliencyEvidence", "Subscriptions",
     "AllResources", "AdvisorFindings", "PolicyCompliance", "ResourceHealth",
     "DeprecatedResources", "MisconfigFindings", "SecurityAssessments",
     "DefenderCostEstimate", "DefenderPosture", "DefenderServersCoverage",
@@ -110,6 +110,7 @@ def write_excel(scan_data: dict, output_path: str) -> None:
     _write_overview_sheet(wb, scan_data)
     _write_classification_sheet(wb, scan_data, sheet_map)
     _write_modernization_sheet(wb, scan_data)
+    _write_resiliency_evidence_sheet(wb, scan_data)
     _write_subscriptions_sheet(wb, scan_data)
     _write_all_resources_sheet(wb, scan_data, include_tags, sheet_map)
     _write_resource_type_sheets(wb, scan_data, include_tags, sheet_map)
@@ -138,6 +139,64 @@ def write_excel(scan_data: dict, output_path: str) -> None:
 
     wb.save(output_path)
     logger.info(f"Excel workbook saved: {output_path}")
+
+
+def _write_resiliency_evidence_sheet(wb, scan_data: dict):
+    """Write observed regional resiliency evidence with classification context."""
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from processors.resiliency import build_resiliency_assessment
+
+    assessment = build_resiliency_assessment(scan_data)
+    if not assessment.get("available"):
+        return
+
+    environment = assessment.get("environment", {})
+    ws = wb.create_sheet("ResiliencyEvidence")
+    ws.sheet_view.showGridLines = False
+    ws.merge_cells("A1:F1")
+    ws["A1"] = "Resiliency Evidence — Current Environment + Control Signals"
+    ws["A1"].font = Font(bold=True, size=15, color="FFFFFF")
+    ws["A1"].fill = PatternFill("solid", fgColor=COLOR_HEADER_BG)
+    ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[1].height = 28
+    ws.merge_cells("A2:F2")
+    ws["A2"] = "Observed regional distribution and zone signals; not a workload-level resiliency certification."
+    ws["A2"].font = Font(size=9, italic=True, color="777777")
+
+    ws.merge_cells("A4:F4")
+    ws["A4"] = "REGIONAL EVIDENCE BY CLASSIFICATION"
+    ws["A4"].font = Font(bold=True, size=11, color="FFFFFF")
+    ws["A4"].fill = PatternFill("solid", fgColor="1F4E79")
+    ws["A4"].alignment = Alignment(horizontal="center")
+    headers = ["Region", "Resources", "%", "Subscriptions", "Business Pillars", "Technical Categories"]
+    for column, header in enumerate(headers, 1):
+        ws.cell(5, column).value = header
+    _header_style(ws, 5, len(headers))
+    _auto_filter(ws, 5, len(headers))
+    _freeze(ws, 6)
+    for row_number, region in enumerate(environment.get("region_distribution", []), 6):
+        ws.cell(row_number, 1).value = region.get("region", "")
+        ws.cell(row_number, 2).value = region.get("resources", 0)
+        ws.cell(row_number, 3).value = region.get("percentage", 0)
+        ws.cell(row_number, 4).value = region.get("subscriptions", 0)
+        ws.cell(row_number, 5).value = ", ".join((region.get("business_pillars") or {}).keys())
+        ws.cell(row_number, 6).value = ", ".join((region.get("technical_categories") or {}).keys())
+
+    summary_row = 7 + len(environment.get("region_distribution", []))
+    ws.merge_cells(start_row=summary_row, start_column=1, end_row=summary_row, end_column=2)
+    ws.cell(summary_row, 1).value = "TECHNICAL CATEGORY DISTRIBUTION"
+    ws.cell(summary_row, 1).font = Font(bold=True, size=11, color="FFFFFF")
+    ws.cell(summary_row, 1).fill = PatternFill("solid", fgColor="1F4E79")
+    ws.cell(summary_row + 1, 1).value = "Technical Category"
+    ws.cell(summary_row + 1, 2).value = "Resources"
+    _header_style(ws, summary_row + 1, 2)
+    for row_number, (category, count) in enumerate(
+        sorted((environment.get("technical_category_distribution") or {}).items(), key=lambda item: -item[1]),
+        summary_row + 2,
+    ):
+        ws.cell(row_number, 1).value = category
+        ws.cell(row_number, 2).value = count
+    _col_widths(ws, [24, 14, 12, 16, 42, 55])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1183,7 +1242,7 @@ def _write_modernization_sheet(wb, scan_data: dict):
     ws = wb.create_sheet("ModernizationSignals")
     ws.sheet_view.showGridLines = False
 
-    ws.merge_cells("A1:H1")
+    ws.merge_cells("A1:K1")
     title = ws["A1"]
     title.value = "Cloud Modernization & Opportunity — Signals (INFERRED)"
     title.font = Font(bold=True, size=16, color="FFFFFF")
@@ -1196,7 +1255,7 @@ def _write_modernization_sheet(wb, scan_data: dict):
     summary = a.get("summary", {})
     ws["A3"] = summary.get("narrative", "")
     ws["A3"].font = Font(size=10, bold=True, color="1F4E79")
-    ws.merge_cells("A3:H3")
+    ws.merge_cells("A3:K3")
     ws.row_dimensions[3].height = 28
     ws["A3"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
@@ -1206,8 +1265,10 @@ def _write_modernization_sheet(wb, scan_data: dict):
     asis = summary.get("as_is", {})
     sm = asis.get("service_model", {})
     bp = asis.get("business_pillar", {})
+    tc = asis.get("technical_category", {})
     sm_counts, sm_pct = sm.get("counts", {}), sm.get("pct", {})
     bp_counts, bp_pct = bp.get("counts", {}), bp.get("pct", {})
+    tc_counts, tc_pct = tc.get("counts", {}), tc.get("pct", {})
 
     ws.merge_cells("A5:C5")
     ws["A5"].value = "CURRENT ENVIRONMENT — BY SERVICE MODEL"
@@ -1219,6 +1280,11 @@ def _write_modernization_sheet(wb, scan_data: dict):
     ws["E5"].fill = section_fill
     ws["E5"].font = section_font
     ws["E5"].alignment = Alignment(horizontal="center")
+    ws.merge_cells("I5:K5")
+    ws["I5"].value = "BY TECHNICAL CATEGORY"
+    ws["I5"].fill = section_fill
+    ws["I5"].font = section_font
+    ws["I5"].alignment = Alignment(horizontal="center")
 
     def _asis_rows(col0, counts, pct):
         r = 6
@@ -1242,13 +1308,14 @@ def _write_modernization_sheet(wb, scan_data: dict):
 
     end_sm = _asis_rows(1, sm_counts, sm_pct)
     end_bp = _asis_rows(5, bp_counts, bp_pct)
-    ctx_row = max(end_sm, end_bp)
+    end_tc = _asis_rows(9, tc_counts, tc_pct)
+    ctx_row = max(end_sm, end_bp, end_tc)
     ws.cell(row=ctx_row, column=1).value = (
         f"Context: {asis.get('third_party_pct', 0)}% of resources are third-party / Marketplace "
         f"publishers (neutral — informational only)."
     )
     ws.cell(row=ctx_row, column=1).font = Font(size=9, italic=True, color="888888")
-    ws.merge_cells(start_row=ctx_row, start_column=1, end_row=ctx_row, end_column=8)
+    ws.merge_cells(start_row=ctx_row, start_column=1, end_row=ctx_row, end_column=11)
 
     header_row = ctx_row + 2
     headers = ["Dimension", "Score", "Level", "Confidence", "Opportunity",

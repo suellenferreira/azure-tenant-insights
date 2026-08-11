@@ -24,6 +24,7 @@
 - [Item 9: Resource Classification Taxonomy](#item-9-resource-classification-taxonomy)
 - [Item 10: Architecture Diagrams (draw.io)](#item-10-architecture-diagrams-drawio)
 - [Item 11: Cloud Modernization & Opportunity Assessment](#item-11-cloud-modernization--opportunity-assessment)
+- [Item 12: Resiliency Posture Signals](#item-12-resiliency-posture-signals)
 - [How to Use This Document](#how-to-use-this-document)
 - [Assessment Model](#assessment-model)
 - [Data Sources & References](#data-sources--references)
@@ -672,6 +673,34 @@ Non-prescriptive by design: it surfaces *signals* and *opportunity indicators*, 
 
 ---
 
+## Item 12: Resiliency Posture Signals
+
+### What It Does
+Observes regional distribution breadth and multi-zone resource configuration signals from the resource inventory. Shows which regions contain workloads and which resources expose recognized multi-zone properties. No scoring or inference applied.
+
+### Data Sources
+- Azure Resource Graph resource inventory and properties (location, zones, zoneRedundant)
+- Resource count aggregation by region
+
+### Scoring Model
+Removed. The model now reports factual observations only: region count, concentration percentage, and multi-zone resource count.
+
+### Where It Appears
+- **Executive report**: dedicated *Resiliency Posture* section with Active Regions and Top Region Exposure KPIs plus regional summary and multi-zone signals.
+- **Technical report**: dedicated *Resiliency Posture — Technical Evidence* section with donut chart of top 5 regions, regional evidence table, and resiliency evidence matrix.
+- **Excel Overview**: *RESILIENCY POSTURE* snapshot block with factual metrics (regions, resources, exposure, multi-zone signals).
+- **Excel `ResiliencyEvidence`**: evidence matrix, regional evidence table, and NEW MULTI-ZONE RESOURCE LIST sheet with complete resource details (name, type, region, zones detected, subscription, resource group). Warning badge appears if count exceeds 100.
+
+### Interpretation Boundaries
+Resiliency posture reflects resource properties observed in Azure Resource Graph inventory. It does NOT include:
+- Workload-level backup protection validation
+- Operational backup health
+- Service-specific architecture details that may not be visible from inventory
+
+Internal zone configuration may not be fully visible from Azure Resource Graph.
+
+---
+
 ## Data Sources & References
 
 ### Primary Azure APIs
@@ -692,7 +721,7 @@ Non-prescriptive by design: it surfaces *signals* and *opportunity indicators*, 
 | Pillar | Documentation | Usage |
 |---|---|---|
 | **Security** | [WAF Security Pillar](https://learn.microsoft.com/en-us/azure/architecture/framework/security/) | HTML report WAF categorization |
-| **Reliability** | [WAF Reliability](https://learn.microsoft.com/en-us/azure/architecture/framework/resiliency//) | Health events, backup assessment |
+| **Reliability** | [WAF Reliability](https://learn.microsoft.com/en-us/azure/architecture/framework/resiliency//) | Regional and multi-zone resiliency context |
 | **Performance** | [WAF Performance](https://learn.microsoft.com/en-us/azure/architecture/framework/scalability/) | Resource sizing recommendations |
 | **Operational Excellence** | [WAF Ops Excellence](https://learn.microsoft.com/en-us/azure/architecture/framework/devops/) | Monitoring, logging, automation |
 | **Cost** | [WAF Cost Optimization](https://learn.microsoft.com/en-us/azure/architecture/framework/cost/cost-optimization/) | Tag coverage, cost allocation |

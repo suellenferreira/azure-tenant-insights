@@ -11,6 +11,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Phase 3A: Resource Classification Taxonomy Refinement & Technical Report Enhancements**
+- `config/resource_classification.yaml`: Added type-exact overrides for Azure Container Registry (ACR) resources to enable sub-namespace granularity:
+  - `microsoft.containerregistry/registries` → Technical Category: "Compute - Containers - Registry" (Business Pillar: Compute, Service Model: PaaS)
+  - `microsoft.containerregistry/registries/replications` → Technical Category: "Compute - Containers - Registry Replication" (Business Pillar: Compute, Service Model: PaaS)
+  - Type-exact matching precedence: exact type > provider namespace > default (non-Microsoft)
+
+- `writers/excel_writer.py`: Enhanced AllResources sheet with new "Detailed Technical Category" column:
+  - Column position: After "Service Model" (column 8 of 13+)
+  - Data source: `classify_resource_type()` function returning refined technical category
+  - Width: 35 characters for full category display (e.g., "Compute - Containers - Registry", "Storage - Blob Accounts")
+  - Impact: Users can now pivot/filter Excel by granular technical categories, enabling more precise cost, compliance, and modernization analysis
+
+- `writers/html_technical.py`: New Technical HTML report section "📊 Technical Category Distribution":
+  - Function: `_build_technical_categories_section(resources_by_type)` (lines 1836-1872)
+  - Location: Infrastructure section, immediately after "📦 Resource Inventory", before Azure Arc section
+  - Pagination: 5 categories initially displayed + "Load More" button for additional categories
+  - Columns: Technical Category | Resource Count
+  - Sidebar Navigation: Added link "📊 Technical Categories" → anchor `#technical-categories`
+  - Aggregation: Resources grouped by refined technical category with count totals, sorted descending by resource count
+  - Output Format: Interactive HTML table with pagination attributes (`data-paginate="5" data-page-step="5"`)
+
+**Excel Sheet Enhancement: Technical Category Dimension** *(NEW)*
+- `writers/excel_writer.py`: Enhanced **ModernizationSignals** sheet with "BY TECHNICAL CATEGORY" mini-table:
+  - Location: Columns I-K, row 5 (alongside Service Model and Business Pillar sections)
+  - Display: Technical Category labels with resource counts and percentages
+  - Data Source: `asis.get("technical_category", {})` from modernization assessment summary
+  - Impact: Enables cross-dimensional analysis of modernization signals by technical category
+
+- `writers/excel_writer.py`: Enhanced **ResiliencyEvidence** sheet with "TECHNICAL CATEGORY DISTRIBUTION" section:
+  - Location: Columns 10-11, row 3 (alongside Service Model and Business Pillar distributions)
+  - Display: Technical Category labels with resource counts
+  - Data Source: `env.get("technical_category_distribution", {})` from resiliency assessment
+  - Width: 35 characters for full technical category names (e.g., "Compute - Containers - Registry")
+  - Impact: Provides technical category breakdown of regional resiliency posture
+
+- `processors/resiliency.py`: Updated resiliency assessment pipeline to compute technical category aggregations:
+  - `_resource_dimensions()`: Added technical_category dimension alongside service_model and business_pillar
+  - `_regional_rows()`: Added technical_categories breakdown per region for cross-dimensional regional analysis
+  - `_build_subscription_rows()`: Added technical_category_distribution per subscription for subscription-level analysis
+  - `build_resiliency_assessment()`: Exposed technical_category_distribution in environment object (top-level tenant view)
+
+**Post-Scan Report Adjustments (8 items completed)**
+- Defender for Cloud pagination: Defender Plans table and Individual Resource Coverage table now display 10 initial rows + "Load More" button
+- All Findings table: 5 initial rows + "Load More" button for progressive disclosure of findings
+- Landing Zone Observations: Confirmed color alternation (blue info / yellow warn) working as designed; no changes required
+- Service Model table: Wrapped in `.table-scroll` div for responsive horizontal scrolling on smaller screens
+- Excel ResiliencyEvidence: Removed duplicate "MULTI-ZONE RESOURCE VALIDATION LIST" section (was redundant with first section)
+
+**Classification System Evolution**
+- 3-tier classification system expanded to support granular sub-namespace categorization:
+  - Tier 1: `technical_category` (refined e.g., "Compute - Containers - Registry" vs "Compute - Containers")
+  - Tier 2: `business_pillar` (Compute, Data Platform, Security, Operations, etc.)
+  - Tier 3: `service_model` (IaaS | PaaS | SaaS | Hybrid | Supporting Services | Other)
+  - Tier 4 (type-exact): `types:` section in YAML for highest-precedence overrides
+- Minimum scope: ACR (Registry + Replication) type-exacts; extensible to other namespaces via YAML configuration
+
+### Changed
+
+- Technical HTML report structure: "Technical Category Distribution" now appears in Infrastructure section (after Resource Inventory) to enable top-down classification analysis before WAF/Defender sections
+
+### Fixed
+
+- Excel ResiliencyEvidence sheet: Removed duplicate "MULTI-ZONE RESOURCE VALIDATION LIST" section, keeping first section as the authoritative inventory
+- Report pagination consistency: All large tables now follow standard pagination pattern (5–10 initial rows, "Load More" button, generic `initPaginated()` JS function)
+
+---
+
+### Added
+
 **Cloud Modernization & Opportunity Assessment (INFERRED)**
 - New `processors/modernization.py` + `config/modernization_signals.yaml`: evolves the assessment from an inventory view into a maturity/opportunity view. Ten dimensions (Infrastructure, Application, Database, Data Platform & Analytics, AI Readiness, Automation, Security, Governance/Landing Zone, Observability, and a neutral Azure-Native vs Third-Party footprint) each get a **0–100 score**, a **level**, a **confidence**, an inferred **signal**, supporting **evidence**, and an **opportunity** indicator. Scoring methods: proportion, presence (family breadth), security (Defender coverage + misconfig density), governance (tags + policy compliance + Management Group structure), and footprint (publisher split).
 - Fully config-driven, **non-prescriptive** (signals & opportunity indicators, never deterministic recommendations), evidence-backed, with **deterministic** (non-AI) narrative templates and framework references (WAF / CAF / ESLZ / AI-Ready / Defender). No third-party vendors are named. Derived entirely from already-collected data — no extra Azure calls.

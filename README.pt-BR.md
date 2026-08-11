@@ -36,12 +36,18 @@ O Azure Tenant Insights (ATI) realiza o scan de um tenant Azure (assinaturas ún
 
 | Saída | Público-Alvo | Conteúdo |
 |---|---|---|
-| `*_Inventory.xlsx` | Todas as equipes | Inventário Excel estruturado e multi-abas, organizado por tipo de recurso |
-| `*_Executive.html` | C-Level / Stakeholders | Pontuação de risco, KPIs, recomendações estratégicas, sinais de modernização |
-| `*_Technical.html` | Engenheiros / Arquitetos | Findings por pilar WAF, violações de policy, misconfigs, saúde, recursos deprecados |
+| `*_Inventory.xlsx` | Todas as equipes | Inventário Excel estruturado e multi-abas, organizado por tipo de recurso, incluindo no Overview um snapshot de sinais regionais e de configuração multi-zona |
+| `*_Executive.html` | C-Level / Stakeholders | Pontuação de risco, KPIs, recomendações estratégicas, sinais de modernização e observações de postura de resiliência |
+| `*_Technical.html` | Engenheiros / Arquitetos | Findings por pilar WAF, violações de policy, misconfigs, saúde, recursos deprecados e análise detalhada regionais/multi-zona de resiliência |
 | `*.drawio` | Arquitetos | Diagrama de arquitetura multi-página — Overview, Organization, Service Model, Business Pillar, Network Topology, Network Detail, Security Posture e Recursos por assinatura — com ícones Azure reais; abra no [draw.io](https://app.diagrams.net) |
 
 Todos os dados são obtidos **exclusivamente de APIs oficiais do Azure** — Azure Resource Graph, Azure Advisor, Azure Policy Insights, Resource Health e, opcionalmente, Defender for Cloud e Cost Management.
+
+A visão de postura de resiliência reflete apenas as propriedades de recursos observadas no inventário do Azure Resource Graph. Inclui:
+- Distribuição regional (quais regiões contêm recursos)
+- Sinais de configuração multi-zona (quais recursos expõem propriedades de zona)
+
+Não inclui validação de proteção de backup em nível de carga de trabalho, saúde operacional de backup ou detalhes de arquitetura específicos do serviço.
 
 ---
 

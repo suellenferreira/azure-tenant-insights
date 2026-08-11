@@ -148,3 +148,6 @@ types:
   microsoft.sqlvirtualmachine/sqlvirtualmachines: { technical_category: "Database - Relational", business_pillar: "Data Platform", service_model: "IaaS" }
   # Static Web Apps are a managed PaaS surface
   microsoft.web/staticsites: { technical_category: "Compute - Platform Apps", business_pillar: "Compute", service_model: "PaaS" }
+  # Container Registry granularization
+  microsoft.containerregistry/registries: { technical_category: "Compute - Containers - Registry", business_pillar: "Compute", service_model: "PaaS" }
+  microsoft.containerregistry/registries/replications: { technical_category: "Compute - Containers - Registry Replication", business_pillar: "Compute", service_model: "PaaS" }

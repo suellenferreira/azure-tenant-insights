@@ -19,6 +19,7 @@ import logging
 from collections import Counter
 from typing import Any, Dict, List
 
+from processors.resiliency import build_resiliency_assessment
 from writers.safety import html_safe_data
 
 logger = logging.getLogger(__name__)
@@ -52,14 +53,10 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
     ])
     sub_list = sub_list if sub_list else "N/A"
 
-    # Compute overall risk level from critical findings count
-    critical = summary.get("critical_findings_count", 0)
-    if critical > 10:
-        risk_level, risk_color = "HIGH", "#C00000"
-    elif critical > 3:
-        risk_level, risk_color = "MEDIUM", "#FFC000"
-    else:
-        risk_level, risk_color = "LOW", "#70AD47"
+    # Overall risk level — computed centrally in processors/summary.py
+    # (percentage-based: <5% LOW, 5-20% MEDIUM, 20-30% HIGH, >30% CRITICAL)
+    risk_level = summary.get("risk_level", "LOW")
+    risk_color = summary.get("risk_color", "#70AD47")
 
     # Chart data
     advisor_by_pillar = summary.get("advisor_by_pillar", {})
@@ -70,9 +67,9 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
     type_labels = json.dumps([t[0].split("/")[-1].title() for t in top_types])
     type_values = json.dumps([t[1] for t in top_types])
 
-    # Top findings: min 5 if available; up to 10 for large environments (>= 500 resources)
-    _max_findings = 10 if summary.get("total_resources", 0) >= 500 else 5
-    top_findings = _build_top_findings(advisor_data, misconfig_findings, defender_data, max_findings=_max_findings)
+    # Top findings: collect up to 30 (ordered by severity); the report shows the
+    # first 5 by default with a client-side "Load more" control (see findings_html).
+    top_findings = _build_top_findings(advisor_data, misconfig_findings, defender_data, max_findings=30)
 
     # Strategic recommendations
     strategic_recs = _build_strategic_recommendations(
@@ -87,6 +84,9 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
 
     # Regional distribution analysis
     region_summary = _analyze_regions(resources_by_type)
+
+    resiliency = build_resiliency_assessment(scan_data)
+    resiliency_html = _build_resiliency_exec_html(resiliency)
 
     # Item 0: Build collection warnings note for report footer
     collection_warnings = scan_data.get("collection_warnings", [])
@@ -133,6 +133,7 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
         type_values=type_values,
         strategic_recs=strategic_recs,
         modernization_html=modernization_html,
+        resiliency_html=resiliency_html,
         region_summary=region_summary,
         deprecated_count=len(deprecated),
         lz_exec_html=lz_exec_html,
@@ -758,10 +759,120 @@ def _build_modernization_exec_html(assessment: dict) -> str:
   </script>"""
 
 
+def _build_resiliency_exec_html(assessment: dict) -> str:
+        """Executive resiliency posture focused on business-level signals."""
+        if not assessment or not assessment.get("available"):
+                return (
+                        '<div class="section" id="resiliency">'
+                        '<h2>🧭 Resiliency Posture</h2>'
+                        '<p class="no-data">Resiliency posture data is not available for this scan.</p>'
+                        '</div>'
+                )
+
+        env = assessment.get("environment", {})
+        ev = assessment.get("evidence", {})
+        s = assessment.get("summary", {})
+
+        top_regions = "".join(
+            f'<tr><td>{r.get("region", "")}</td><td class="num">{r.get("resources", 0):,}</td><td class="num">{r.get("percentage", 0)}%</td></tr>'
+            for r in (env.get("region_distribution") or [])[:5]
+        ) or '<tr><td colspan="3" class="no-data">No regional evidence available.</td></tr>'
+
+        # Donut chart data for Executive (top 5 regions)
+        top_5_regions = (env.get("region_distribution") or [])[:5]
+        exec_region_labels = ", ".join([f'"{r.get("region", "")}"' for r in top_5_regions])
+        exec_region_values = ", ".join([str(r.get("resources", 0)) for r in top_5_regions])
+
+        signal_rows = "".join(
+            f'<tr><td>{label}</td><td>{item.get("status", "")}</td><td class="num">{item.get("detected") if item.get("detected") is not None else "N/A"}</td><td>{item.get("scope", "")}</td></tr>'
+            for label, item in [
+                ("Multi-region coverage (region count)", ev.get("multi_region", {})),
+                ("Multi-zone resources detected (resource count)", ev.get("zone", {})),
+            ]
+        )
+
+        # Service Model x Region cross-tabulated table (same evidence used by the
+        # Technical report's "Resiliency Snapshot by Service Model" section).
+        region_data = env.get("region_distribution") or []
+        all_service_models = set()
+        for r in region_data:
+            all_service_models.update((r.get("service_models") or {}).keys())
+        sorted_service_models = sorted(all_service_models)
+        sm_region_list = [r.get("region", "") for r in region_data]
+        sm_region_dict = {r.get("region", ""): r for r in region_data}
+
+        sm_header = "<table class='dtable'><thead><tr><th>Service Model</th>"
+        for region in sm_region_list:
+            sm_header += f"<th>{region}</th>"
+        sm_header += "</tr></thead><tbody>"
+        sm_rows = ""
+        for model in sorted_service_models:
+            sm_rows += f"<tr><td><strong>{model}</strong></td>"
+            for region in sm_region_list:
+                count = sm_region_dict.get(region, {}).get("service_models", {}).get(model, 0)
+                sm_rows += f"<td class='num'>{count}</td>"
+            sm_rows += "</tr>"
+        service_model_table = f'<div class="table-scroll">{sm_header + sm_rows + "</tbody></table>"}</div>' if sorted_service_models else '<p class="no-data">No service model evidence available.</p>'
+
+        return f"""
+    <div class="section" id="resiliency">
+        <h2>🧭 Resiliency Posture
+            <small style="font-size:.72rem;color:#888;font-weight:normal;margin-left:.5rem">(Observed evidence)</small>
+        </h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:.8rem;margin-bottom:.9rem">
+            <div class="mod-chip"><div class="chip-val">{env.get("regional_resources", 0):,}</div><div class="chip-lbl">Regional Resources</div></div>
+            <div class="mod-chip"><div class="chip-val">{env.get("regions", 0)}</div><div class="chip-lbl">Active Regions</div></div>
+            <div class="mod-chip"><div class="chip-val">{s.get("single_region_exposure_pct", 0)}%</div><div class="chip-lbl">Top Region Exposure</div></div>
+            <div class="mod-chip"><div class="chip-val">{s.get("zone_signal_count", 0)}</div><div class="chip-lbl">Multi-zone Signals</div></div>
+        </div>
+
+        <details open style="margin:.55rem 0;border:1px solid #e6eef7;border-radius:8px;padding:.55rem .8rem">
+            <summary style="cursor:pointer;color:#1F4E79;font-weight:700">Business Snapshot</summary>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;margin-top:.55rem">
+                <div class="table-scroll">
+                    <table class="dtable">
+                        <thead><tr><th>Top Region</th><th class="num">Resources</th><th class="num">Exposure</th></tr></thead>
+                        <tbody>{top_regions}</tbody>
+                    </table>
+                </div>
+                <div style="height:240px;">
+                    <canvas id="execRegionDonut"></canvas>
+                </div>
+            </div>
+            <script>(function(){{var ctx = document.getElementById('execRegionDonut'); if (ctx && ctx.parentElement.offsetWidth > 150) {{new Chart(ctx.getContext('2d'), {{type: 'doughnut', data: {{labels: [{exec_region_labels}], datasets: [{{data: [{exec_region_values}], backgroundColor: ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D', '#6A994E']}}]}}, options: {{responsive: true, maintainAspectRatio: false, plugins: {{legend: {{position: 'right'}}}}}}}}); }}}})()</script>
+        </details>
+
+        <details style="margin:.55rem 0;border:1px solid #e6eef7;border-radius:8px;padding:.55rem .8rem">
+            <summary style="cursor:pointer;color:#1F4E79;font-weight:700">Resiliency Snapshot by Service Model</summary>
+            <details style="margin:.5rem 0;border:1px solid #e6eef7;border-radius:8px;padding:.5rem .7rem" open>
+                <summary style="cursor:pointer;font-weight:700;color:#1F4E79;font-size:.85rem">📋 Service Model Definitions</summary>
+                <div style="margin-top:.5rem;font-size:.82rem;color:#555;line-height:1.6">
+                    <p><strong>Hybrid:</strong> Arc, VMware, Azure Stack, and cross-environment management.</p>
+                    <p><strong>Supporting Services:</strong> Shared security, operations, governance, and monitoring services.</p>
+                    <p><strong>Other:</strong> Unclassified or third-party / Marketplace resource types; not necessarily a concern.</p>
+                </div>
+            </details>
+            <div style="margin-top:.55rem">{service_model_table}</div>
+        </details>
+
+        <details open style="margin:.55rem 0;border:1px solid #e6eef7;border-radius:8px;padding:.55rem .8rem">
+            <summary style="cursor:pointer;color:#1F4E79;font-weight:700">Configuration Signals</summary>
+            <div class="table-scroll" style="margin-top:.55rem">
+                <table class="dtable">
+                    <thead><tr><th>Signal</th><th>Status</th><th class="num">Detected</th><th>Scope</th></tr></thead>
+                    <tbody>{signal_rows}</tbody>
+                </table>
+            </div>
+            <p style="font-size:.78rem;color:#777;margin-top:.4rem">{assessment.get("notes", {}).get("zone_metric", "")}</p>
+            <p style="font-size:.78rem;color:#777;margin-top:.5rem">{assessment.get("notes", {}).get("interpretation", "")}</p>
+        </details>
+    </div>"""
+
+
 def _render_html(
     scan_date, tenant_id, tenant_name, subscriptions_list, summary, risk_level, risk_color,
     top_findings, pillar_labels, pillar_values,
-    type_labels, type_values, strategic_recs, modernization_html, region_summary, deprecated_count,
+    type_labels, type_values, strategic_recs, modernization_html, resiliency_html, region_summary, deprecated_count,
     lz_exec_html="", defender_exec_html="", defender_posture_exec_html="", zt_exec_html="",
     defender_high=0, defender_total=0,
     warnings_html="",
@@ -778,6 +889,8 @@ def _render_html(
         </div>"""
         for f in top_findings
     ) or '<p class="no-data">No critical findings detected. Environment appears healthy.</p>'
+    if top_findings:
+        findings_html = f'<div id="findings-cards" data-paginate-cards="5" data-page-step="5">{findings_html}</div>'
 
     PRI_ICON = {"Critical": "\U0001f534", "High": "\U0001f7e0", "Medium": "\U0001f7e1", "Low": "\U0001f7e2"}
     recs_html = "".join(
@@ -800,6 +913,24 @@ def _render_html(
     )
 
     kpi = summary
+    risk_pct = summary.get("critical_findings_pct", 0)
+    risk_tooltip_html = (
+        '<details style="margin:.4rem auto 1rem;max-width:640px;font-size:.78rem;color:#888;text-align:left;'
+        'border:1px solid #e6eef7;border-radius:8px;padding:.4rem .8rem;background:#fafcff">'
+        '<summary style="cursor:pointer;color:#2E86AB;font-weight:600;text-align:center">'
+        '&#9432; How is this classification calculated?</summary>'
+        '<div style="margin-top:.5rem;line-height:1.6">'
+        f'<p><strong>Current:</strong> {risk_pct}% critical findings '
+        f'({kpi.get("critical_findings_count", 0)} of {kpi.get("total_resources", 0):,} resources) '
+        f'&rarr; <strong style="color:{risk_color}">{risk_level}</strong></p>'
+        '<p style="margin-top:.4rem"><strong>Thresholds</strong> (% of critical findings vs. total resources):</p>'
+        '<p>&#9679; <strong style="color:#70AD47">LOW</strong> &lt; 5% &nbsp;'
+        '&#9679; <strong style="color:#FFC000">MEDIUM</strong> 5&ndash;20% &nbsp;'
+        '&#9679; <strong style="color:#C00000">HIGH</strong> 20&ndash;30% &nbsp;'
+        '&#9679; <strong style="color:#7B0000">CRITICAL</strong> &gt; 30%</p>'
+        '<p style="margin-top:.4rem;color:#999">Critical findings = High/Critical misconfigurations + High-severity Defender assessments.</p>'
+        '</div></details>'
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -878,6 +1009,12 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 .ctrl-btn{{padding:.35rem 1rem;border:1.5px solid #2E86AB;background:#fff;color:#2E86AB;border-radius:20px;cursor:pointer;font-size:.82rem;font-weight:600;transition:all .2s}}
 .ctrl-btn:hover{{background:#2E86AB;color:#fff}}
 .toggle-btn{{background:none;border:1.5px solid #2E86AB;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:.85rem;line-height:24px;text-align:center;color:#2E86AB;margin-left:.5rem;flex-shrink:0;transition:all .2s;padding:0;float:right}}
+.pg-bar{{display:flex;align-items:center;gap:.6rem;margin:.6rem 0 .2rem;flex-wrap:wrap}}
+.pg-btn{{padding:.28rem .9rem;border:1.5px solid #2E86AB;background:#2E86AB;color:#fff;border-radius:16px;cursor:pointer;font-size:.78rem;font-weight:600;transition:all .2s}}
+.pg-btn:hover{{background:#1F4E79;border-color:#1F4E79}}
+.pg-btn.ghost{{background:#fff;color:#2E86AB}}
+.pg-btn.ghost:hover{{background:#eaf3fa}}
+.pg-info{{font-size:.75rem;color:#888}}
 .toggle-btn:hover{{background:#2E86AB;color:#fff}}
 .rec-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}}
 .footer{{text-align:center;padding:2rem;color:#888;font-size:.82rem}}
@@ -902,6 +1039,7 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
   <a href="#regions">🌍 Regions</a>
   <h3>Modernization</h3>
   <a href="#modernization">🚀 Modernization Signals</a>
+    <a href="#resiliency">🧭 Resiliency Posture</a>
   <h3>Infrastructure</h3>
   <a href="#landing-zone">🏗 Landing Zone</a>
   <h3>Priorities</h3>
@@ -929,6 +1067,7 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
   <div class="ctrl-bar"><button class="ctrl-btn" onclick="expandAll()">&#8862; Expand All</button><button class="ctrl-btn" onclick="collapseAll()">&#8863; Collapse All</button></div>
   {dep_alert}
   <div class="risk-banner">Overall Environment Risk Level: {risk_level}</div>
+  <div style="text-align:center">{risk_tooltip_html}</div>
 
   <div class="kpi-grid" id="overview">
     <div class="kpi-card"><div class="kpi-val">{kpi.get('total_resources',0):,}</div><div class="kpi-lbl">Total Resources</div></div>
@@ -951,6 +1090,8 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
   <div class="section" id="regions"><h2>🌍 Active Regions Distribution</h2><div class="chart-box" style="height:250px"><canvas id="regionChart"></canvas></div></div>
 
   {modernization_html}
+
+    {resiliency_html}
 
   <div class="section" id="landing-zone">
     <h2>🏗 Landing Zone Observations
@@ -1036,5 +1177,39 @@ function collapseAll(){{
   document.querySelectorAll('.section-body').forEach(function(b){{b.style.display='none';}});
   document.querySelectorAll('.toggle-btn').forEach(function(b){{b.innerHTML='&#8963;';}});
 }}
+// ── Card pagination (e.g. Top Priority Findings) ────────────────────────────
+var _cardPageState={{}};
+function initCardPagination(){{
+  document.querySelectorAll('[data-paginate-cards]').forEach(function(container){{
+    var id=container.id;if(!id)return;
+    var size=parseInt(container.getAttribute('data-paginate-cards'),10)||5;
+    var step=parseInt(container.getAttribute('data-page-step'),10)||size;
+    _cardPageState[id]={{size:size,step:step,shown:size}};
+    var bar=document.createElement('div');
+    bar.className='pg-bar';bar.id='pgbar-'+id;
+    container.parentNode.insertBefore(bar,container.nextSibling);
+    _renderCardPage(id);
+  }});
+}}
+function _renderCardPage(id){{
+  var container=document.getElementById(id);var st=_cardPageState[id];if(!container||!st)return;
+  var cards=Array.prototype.slice.call(container.children);
+  var total=cards.length;
+  cards.forEach(function(c,i){{c.style.display=(i<st.shown)?'':'none';}});
+  var bar=document.getElementById('pgbar-'+id);if(!bar)return;
+  bar.innerHTML='';
+  if(st.shown>=total){{
+    if(total>st.size){{var sa=document.createElement('span');sa.className='pg-info';sa.textContent='Showing all '+total+' finding(s)';bar.appendChild(sa);}}
+    return;
+  }}
+  var next=Math.min(st.step,total-st.shown);
+  var b1=document.createElement('button');b1.className='pg-btn';b1.innerHTML='&#9660; Load '+next+' more';
+  b1.addEventListener('click',function(){{st.shown+=st.step;_renderCardPage(id);}});
+  var b2=document.createElement('button');b2.className='pg-btn ghost';b2.textContent='Show all ('+total+')';
+  b2.addEventListener('click',function(){{st.shown=total;_renderCardPage(id);}});
+  var si=document.createElement('span');si.className='pg-info';si.textContent='Showing '+st.shown+' of '+total;
+  bar.appendChild(b1);bar.appendChild(b2);bar.appendChild(si);
+}}
+document.addEventListener('DOMContentLoaded',initCardPagination);
 </script>
 </body></html>"""

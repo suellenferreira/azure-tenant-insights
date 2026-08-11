@@ -20,7 +20,7 @@ Start with **[README.md](./README.md)**.
 Start here → **[DOCUMENTATION.md](./DOCUMENTATION.md)**
 - Collection and processing methodology
 - Data sources and Azure API references
-- WAF, CAF, Zero Trust, Defender, and modernization signals
+- WAF, CAF, Zero Trust, Defender, modernization, and resiliency posture signals
 - Configuration and extension points
 - Limitations and interpretation boundaries
 
@@ -112,6 +112,7 @@ and inferred modernization signals. The detailed methodology is maintained in
 | WAF findings | Azure Advisor recommendations grouped by WAF pillar | [DOCUMENTATION.md](./DOCUMENTATION.md#data-sources--references) |
 | CAF observations | Landing zone observations across security, governance, cost, operations, and reliability | [DOCUMENTATION.md](./DOCUMENTATION.md#item-6-caf-landing-zone-observations) |
 | Modernization signals | Inferred technology adoption and maturity signals | [DOCUMENTATION.md](./DOCUMENTATION.md#item-11-cloud-modernization--opportunity-assessment) |
+| Resiliency posture signals | Regional distribution and multi-zone resource configuration (observed from inventory) | [DOCUMENTATION.md](./DOCUMENTATION.md#item-12-resiliency-posture-signals) |
 | Resource classification | Technical category, business pillar, service model, and publisher | [README.md](./README.md#output-files) |
 | Architecture diagrams | Organization, service model, network, security, and subscription views | [DOCUMENTATION.md](./DOCUMENTATION.md#item-10-architecture-diagrams-drawio) |
 | Regional analytics | Resource distribution by Azure region | [DOCUMENTATION.md](./DOCUMENTATION.md#item-3-active-regions-analytics) |

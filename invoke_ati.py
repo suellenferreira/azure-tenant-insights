@@ -465,6 +465,28 @@ def main() -> None:
                 tenant_name=tenant_name,
             )
 
+        # Register Management Groups as synthetic inventory resources so they
+        # show up in the Excel/HTML resource inventory (previously they only
+        # fed the Organization diagram, causing a false "No Management Groups
+        # detected" Landing Zone warning even when MGs existed).
+        if management_groups and management_groups.get("management_groups"):
+            resources_by_type["microsoft.management/managementgroups"] = [
+                {
+                    "name": mg.get("name", name),
+                    "displayName": mg.get("displayName") or mg.get("name", name),
+                    "type": "microsoft.management/managementgroups",
+                    "location": "global",
+                    "parentName": mg.get("parentName"),
+                    "subscriptionId": "N/A",
+                }
+                for name, mg in management_groups["management_groups"].items()
+            ]
+            total_resources = sum(len(v) for v in resources_by_type.values())
+            logger.info(
+                f"Registered {len(resources_by_type['microsoft.management/managementgroups'])} "
+                "Management Group(s) in the resource inventory."
+            )
+
         # ── 9. Processing ─────────────────────────────────────────
         # Uninstall warning capture before processing phase
         logging.getLogger().removeHandler(_warn_handler)

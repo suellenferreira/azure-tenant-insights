@@ -84,8 +84,27 @@ def compute_summary(
         1 for f in misconfig_findings if f.get("severity") in ("High", "Critical")
     ) + sum(1 for f in defender_data if f.get("severity") == "High")
 
+    # Overall Environment Risk Level — percentage-based thresholds (normalizes
+    # for tenant size instead of an absolute finding count):
+    #   <5%    -> LOW        5-20%  -> MEDIUM
+    #   20-30% -> HIGH       >30%   -> CRITICAL
+    critical_pct = (
+        round((critical_findings / total_resources * 100), 1) if total_resources > 0 else 0.0
+    )
+    if critical_pct > 30:
+        risk_level, risk_color = "CRITICAL", "#7B0000"
+    elif critical_pct > 20:
+        risk_level, risk_color = "HIGH", "#C00000"
+    elif critical_pct >= 5:
+        risk_level, risk_color = "MEDIUM", "#FFC000"
+    else:
+        risk_level, risk_color = "LOW", "#70AD47"
+
     return {
         "total_resources": total_resources,
+        "critical_findings_pct": critical_pct,
+        "risk_level": risk_level,
+        "risk_color": risk_color,
         "total_subscriptions": len(subscriptions),
         "total_resource_types": len(resources_by_type),
         "total_regions": len(location_counts),

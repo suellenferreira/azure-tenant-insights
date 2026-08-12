@@ -322,11 +322,13 @@ def _as_is(rbt: dict) -> Dict[str, Any]:
     sm: Dict[str, int] = {}
     bp: Dict[str, int] = {}
     ms = tp = 0
+    tc: Dict[str, int] = {}
     for rtype, resources in rbt.items():
         c = classify_resource_type(rtype)
         n = len(resources)
         sm[c.get("service_model", "Other")] = sm.get(c.get("service_model", "Other"), 0) + n
         bp[c.get("business_pillar", "Other")] = bp.get(c.get("business_pillar", "Other"), 0) + n
+        tc[c.get("technical_category", "Other")] = tc.get(c.get("technical_category", "Other"), 0) + n
         if str(c.get("publisher", "Microsoft")).lower().startswith("microsoft"):
             ms += n
         else:
@@ -334,11 +336,13 @@ def _as_is(rbt: dict) -> Dict[str, Any]:
     total = sum(sm.values()) or 1
     sm_pct = {k: round(100 * v / total) for k, v in sm.items()}
     bp_pct = {k: round(100 * v / total) for k, v in bp.items()}
+    tc_pct = {k: round(100 * v / total) for k, v in tc.items()}
     tp_total = ms + tp
     third_pct = round(100 * tp / tp_total) if tp_total else 0
     return {
         "service_model": {"counts": sm, "pct": sm_pct},
         "business_pillar": {"counts": bp, "pct": bp_pct},
+        "technical_category": {"counts": tc, "pct": tc_pct},
         "third_party_pct": third_pct, "total_resources": total,
         "iaas_pct": sm_pct.get("IaaS", 0), "paas_pct": sm_pct.get("PaaS", 0),
     }

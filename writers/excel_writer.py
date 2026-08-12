@@ -196,7 +196,46 @@ def _write_resiliency_evidence_sheet(wb, scan_data: dict):
     ):
         ws.cell(row_number, 1).value = category
         ws.cell(row_number, 2).value = count
-    _col_widths(ws, [24, 14, 12, 16, 42, 55])
+
+    def _write_region_matrix(start_row: int, title: str, label_header: str, key: str) -> int:
+        regions = environment.get("region_distribution", []) or []
+        region_names = [region.get("region", "") for region in regions]
+        labels = sorted({
+            label
+            for region in regions
+            for label in (region.get(key) or {}).keys()
+        })
+        last_col = max(2, len(region_names) + 1)
+        ws.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=last_col)
+        ws.cell(start_row, 1).value = title
+        ws.cell(start_row, 1).font = Font(bold=True, size=11, color="FFFFFF")
+        ws.cell(start_row, 1).fill = PatternFill("solid", fgColor="1F4E79")
+        ws.cell(start_row, 1).alignment = Alignment(horizontal="center")
+
+        header_row = start_row + 1
+        ws.cell(header_row, 1).value = label_header
+        for column, region_name in enumerate(region_names, 2):
+            ws.cell(header_row, column).value = region_name
+        _header_style(ws, header_row, last_col)
+
+        for offset, label in enumerate(labels, 1):
+            row_number = header_row + offset
+            ws.cell(row_number, 1).value = label
+            for column, region in enumerate(regions, 2):
+                ws.cell(row_number, column).value = (region.get(key) or {}).get(label, 0)
+        return header_row + len(labels) + 2
+
+    matrix_start = summary_row + 3 + len(environment.get("technical_category_distribution") or {})
+    matrix_start = _write_region_matrix(
+        matrix_start, "RESILIENCY SNAPSHOT BY SERVICE MODEL", "Service Model", "service_models"
+    )
+    matrix_start = _write_region_matrix(
+        matrix_start, "RESILIENCY SNAPSHOT BY BUSINESS PILLAR", "Business Pillar", "business_pillars"
+    )
+    _write_region_matrix(
+        matrix_start, "RESILIENCY SNAPSHOT BY TECHNICAL CATEGORY", "Technical Category", "technical_categories"
+    )
+    _col_widths(ws, [34, 14, 14, 16, 42, 55, 18, 18, 18, 18, 18, 18])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1101,12 +1140,14 @@ def _write_classification_sheet(wb, scan_data: dict, sheet_map: Dict[str, str]):
 
     by_service: Dict[str, int] = {}
     by_pillar: Dict[str, int] = {}
+    by_category: Dict[str, int] = {}
     rows_data = []
     for rtype, resources in resources_by_type.items():
         cls = classify_resource_type(rtype)
         n = len(resources)
         by_service[cls["service_model"]] = by_service.get(cls["service_model"], 0) + n
         by_pillar[cls["business_pillar"]] = by_pillar.get(cls["business_pillar"], 0) + n
+        by_category[cls["technical_category"]] = by_category.get(cls["technical_category"], 0) + n
         rows_data.append((rtype, cls, n))
 
     ws.merge_cells("A1:G1")
@@ -1162,8 +1203,25 @@ def _write_classification_sheet(wb, scan_data: dict, sheet_map: Dict[str, str]):
         vc.font = Font(bold=True, size=10)
         r += 1
 
+    ws.merge_cells("G4:H4")
+    ws["G4"].value = "BY TECHNICAL CATEGORY"
+    ws["G4"].fill = section_fill
+    ws["G4"].font = section_font
+    ws["G4"].alignment = Alignment(horizontal="center")
+    r = 5
+    for label, cnt in sorted(by_category.items(), key=lambda x: -x[1]):
+        ws.cell(row=r, column=7).value = label
+        ws.cell(row=r, column=7).font = Font(bold=True, size=10)
+        ws.cell(row=r, column=7).fill = PatternFill("solid", fgColor="F5F5F5")
+        vc = ws.cell(row=r, column=8)
+        vc.value = cnt
+        vc.fill = PatternFill("solid", fgColor="D6E4F0")
+        vc.alignment = Alignment(horizontal="center")
+        vc.font = Font(bold=True, size=10)
+        r += 1
+
     # Detail table (one row per resource type present in the scan)
-    table_header_row = max(5 + len(sm_labels), 5 + len(by_pillar)) + 1
+    table_header_row = max(5 + len(sm_labels), 5 + len(by_pillar), 5 + len(by_category)) + 1
     headers = [
         "Resource Type", "Technical Category", "Business Pillar",
         "Service Model", "Publisher", "Count", "Sheet Tab",
@@ -1186,7 +1244,7 @@ def _write_classification_sheet(wb, scan_data: dict, sheet_map: Dict[str, str]):
         ws.cell(row=rr, column=7).value = sheet_map.get(rtype, "(AllResources)")
         rr += 1
 
-    _col_widths(ws, [46, 28, 20, 20, 14, 10, 30])
+    _col_widths(ws, [46, 28, 20, 20, 14, 10, 34, 12])
 
 
 _FAM_ACRONYMS = {"aks", "ai", "sql", "vm", "api", "aci", "acr", "cdn", "waf", "dns", "iot"}

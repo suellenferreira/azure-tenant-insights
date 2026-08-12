@@ -30,6 +30,12 @@ def _esc(value: Any) -> str:
     """HTML-escape a value for safe inline rendering."""
     return html_escape(value)
 
+
+def _defender_plan_counts(defender_posture: list) -> Dict[str, int]:
+    observed = len(defender_posture or [])
+    disabled = sum(1 for plan in (defender_posture or []) if not bool(plan.get("enabled")))
+    return {"observed": observed, "disabled": disabled}
+
 logger = logging.getLogger(__name__)
 
 WAF_PILLARS = [
@@ -116,6 +122,7 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
         defender_posture, resources_by_type, subscriptions
     )
     defender_section = posture_section + defender_section
+    defender_plan_counts = _defender_plan_counts(defender_posture)
 
     # Azure Arc
     arc_resources = (
@@ -196,6 +203,7 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
         policy_count=len(policy_data), misconfig_count=len(misconfig_findings),
         health_count=len(health_data), deprecated_count=len(deprecated),
         advisor_count=len(advisor_data),
+        defender_plan_counts=defender_plan_counts,
         warnings_html=warnings_html,
     )
 
@@ -1904,10 +1912,16 @@ def _render_html(
     has_defender, has_arc,
     policy_count, misconfig_count, health_count,
     deprecated_count, advisor_count,
+    defender_plan_counts=None,
     warnings_html="",
 ) -> str:
     kpi = summary
-    def_nav = '<a href="#defender">🔒 Defender for Cloud</a>' if has_defender else ""
+    defender_plan_counts = defender_plan_counts or {"observed": 0, "disabled": 0}
+    def_nav = (
+        '<a href="#defender-posture">🛡 Defender Plan Posture</a>'
+        '<a href="#defender">🔒 Defender for Cloud</a>'
+        if has_defender else ""
+    )
     arc_nav = '<a href="#arc">🌐 Azure Arc</a>' if has_arc else ""
 
     # Overall risk level — computed centrally in processors/summary.py
@@ -2069,10 +2083,10 @@ summary.mod-h3:hover{{color:#2E86AB}}
   <h3>WAF Analysis</h3>
   <a href="#waf">🏛 WAF Pillar Findings</a>
   <h3>Security</h3>
-  <a href="#policy">📋 Policy Compliance</a>
   <a href="#misconfig">⚠ Misconfigurations</a>
   {def_nav}
   <a href="#zerotrust">🛡 Zero Trust Posture</a>
+    <a href="#policy">📋 Policy Compliance</a>
   <h3>Reliability</h3>
   <a href="#health">❤ Resource Health</a>
   <a href="#deprecated">⛔ Deprecated Resources</a>
@@ -2099,9 +2113,13 @@ summary.mod-h3:hover{{color:#2E86AB}}
     <div class="section">
       <div class="kpi-grid">
         <div class="kpi-card"><div class="kpi-val">{kpi.get('total_resources',0):,}</div><div class="kpi-lbl">Total Resources</div></div>
+                <div class="kpi-card"><div class="kpi-val">{kpi.get('total_subscriptions',0)}</div><div class="kpi-lbl">Subscriptions</div></div>
         <div class="kpi-card"><div class="kpi-val">{advisor_count}</div><div class="kpi-lbl">Advisor Findings</div></div>
+                <div class="kpi-card"><div class="kpi-val">{kpi.get('critical_findings_count',0)}</div><div class="kpi-lbl" title="Combined count: High/Critical configuration findings + High-severity Defender for Cloud assessments. Not a unique-resource count.">High/Critical Security Signals</div></div>
         <div class="kpi-card"><div class="kpi-val">{misconfig_count}</div><div class="kpi-lbl">Misconfigs</div></div>
-        <div class="kpi-card"><div class="kpi-val">{policy_count}</div><div class="kpi-lbl">Policy Violations</div></div>
+                <div class="kpi-card"><div class="kpi-val">{policy_count}</div><div class="kpi-lbl">Non-Compliant Policy Records</div></div>
+                <div class="kpi-card"><div class="kpi-val">{defender_plan_counts.get('observed',0)}</div><div class="kpi-lbl">Defender Plans Observed</div></div>
+                <div class="kpi-card"><div class="kpi-val">{defender_plan_counts.get('disabled',0)}</div><div class="kpi-lbl">Disabled Defender Plans</div></div>
         <div class="kpi-card"><div class="kpi-val">{health_count}</div><div class="kpi-lbl">Health Issues</div></div>
         <div class="kpi-card"><div class="kpi-val">{deprecated_count}</div><div class="kpi-lbl">Deprecated</div></div>
         <div class="kpi-card"><div class="kpi-val">{region_summary.get('total_regions',0)}</div><div class="kpi-lbl">Active Regions</div></div>
@@ -2166,13 +2184,6 @@ summary.mod-h3:hover{{color:#2E86AB}}
       {waf_html}
     </div>
 
-    <div class="section" id="policy">
-      <h2>📋 Policy Compliance <span class="cnt">{policy_count}</span></h2>
-      <p class="note">Resources non-compliant with assigned Azure Policy definitions.</p>
-            {policy_summary_html}
-      {policy_html}
-    </div>
-
     <div class="section" id="misconfig">
       <h2>⚠ Known Misconfigurations <span class="cnt">{misconfig_count}</span></h2>
       <p class="note">Configuration findings based exclusively on official Microsoft Azure best practices. All rules are linked to documentation.</p>
@@ -2182,6 +2193,13 @@ summary.mod-h3:hover{{color:#2E86AB}}
     {defender_section}
 
     {zerotrust_html}
+
+        <div class="section" id="policy">
+            <h2>📋 Policy Compliance <span class="cnt">{policy_count}</span></h2>
+            <p class="note">Non-compliant records returned for assigned Azure Policy definitions.</p>
+                        {policy_summary_html}
+            {policy_html}
+        </div>
 
     <div class="section" id="health">
       <h2>❤ Resource Health <span class="cnt">{health_count}</span></h2>
@@ -2316,6 +2334,11 @@ function _renderPage(id){{
   bar.innerHTML='';
   if(st.shown>=total){{
     var sa=document.createElement('span');sa.className='pg-info';sa.textContent='Showing all '+total+' row(s)';bar.appendChild(sa);
+        if(total>st.size){{
+            var less=document.createElement('button');less.className='pg-btn ghost';less.textContent='Show less';
+            less.addEventListener('click',function(){{resetPage(id);}});
+            bar.appendChild(less);
+        }}
     return;
   }}
   var next=Math.min(st.step,total-st.shown);
@@ -2324,10 +2347,17 @@ function _renderPage(id){{
   var b2=document.createElement('button');b2.className='pg-btn ghost';b2.textContent='Show all ('+total+')';
   b2.addEventListener('click',function(){{loadAll(id);}});
   var si=document.createElement('span');si.className='pg-info';si.textContent='Showing '+st.shown+' of '+total;
-  bar.appendChild(b1);bar.appendChild(b2);bar.appendChild(si);
+    bar.appendChild(b1);bar.appendChild(b2);
+    if(st.shown>st.size){{
+        var less=document.createElement('button');less.className='pg-btn ghost';less.textContent='Show less';
+        less.addEventListener('click',function(){{resetPage(id);}});
+        bar.appendChild(less);
+    }}
+    bar.appendChild(si);
 }}
 function loadMore(id){{var st=_pageState[id];if(!st)return;st.shown+=st.step;_renderPage(id);}}
 function loadAll(id){{var st=_pageState[id];var tbl=document.getElementById(id);if(!st||!tbl)return;st.shown=_dataRows(tbl).length;_renderPage(id);}}
+function resetPage(id){{var st=_pageState[id];if(!st)return;st.shown=st.size;_renderPage(id);}}
 function _togglePgBar(id,show){{var bar=document.getElementById('pgbar-'+id);if(bar)bar.style.display=show?'':'none';}}
 document.addEventListener('DOMContentLoaded',initPaginated);
 </script>

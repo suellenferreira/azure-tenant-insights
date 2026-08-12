@@ -551,8 +551,8 @@ Adds three Defender for Cloud capabilities on top of the existing assessments co
 ### Reports Where Shown
 
 - **Excel**: `DefenderPosture`, `DefenderServersCoverage`, `DefenderCoverageGap`, `DefenderCostEstimate` sheets.
-- **Executive Report**: Defender posture summary + coverage-gap line (with price source).
-- **Technical Report**: "Defender — Plan Posture" section and "Coverage Gap & Cost to Protect" table (with price source).
+- **Executive Report**: Defender plan posture KPIs (`Defender Plans Observed`, `Disabled Defender Plans`) plus an expanded Defender Plan Posture section.
+- **Technical Report**: direct sidebar access to "Defender — Plan Posture" and "Coverage Gap & Cost to Protect" table (with price source).
 
 ### Limitations & Notes
 
@@ -603,7 +603,7 @@ Classifies every resource type into a 3-tier assessment taxonomy plus a Publishe
 `processors/classifier.py::classify_resource_type()` resolves each type by precedence: **exact type → provider namespace → third-party/default**, returning `{technical_category, business_pillar, service_model, publisher}`.
 
 ### Where It Appears
-- **Excel `Classification` sheet** (right after `Index`): summary pivots (by Service Model and by Business Pillar) + a per-type table (`Resource Type | Technical Category | Business Pillar | Service Model | Publisher | Count | Sheet Tab`).
+- **Excel `Classification` sheet** (right after `Index`): summary pivots by Service Model, Business Pillar, and Technical Category + a per-type table (`Resource Type | Technical Category | Business Pillar | Service Model | Publisher | Count | Sheet Tab`).
 - **`AllResources`**: new `Business Pillar` and `Service Model` columns.
 - **`Overview`**: a `SERVICE MODEL` summary block alongside `RESOURCE ORIGIN`.
 
@@ -689,7 +689,7 @@ Removed. The model now reports factual observations only: region count, concentr
 - **Executive report**: dedicated *Resiliency Posture* section with Active Regions and Top Region Exposure KPIs plus regional summary and multi-zone signals.
 - **Technical report**: dedicated *Resiliency Posture — Technical Evidence* section with donut chart of top 5 regions, regional evidence table, and resiliency evidence matrix.
 - **Excel Overview**: *RESILIENCY POSTURE* snapshot block with factual metrics (regions, resources, exposure, multi-zone signals).
-- **Excel `ResiliencyEvidence`**: evidence matrix, regional evidence table, and NEW MULTI-ZONE RESOURCE LIST sheet with complete resource details (name, type, region, zones detected, subscription, resource group). Warning badge appears if count exceeds 100.
+- **Excel `ResiliencyEvidence`**: observed regional evidence, Technical Category distribution, and regional matrices by Service Model, Business Pillar, and Technical Category. Multi-zone signals remain evidence-only and are not a workload-level resiliency certification.
 
 ### Interpretation Boundaries
 Resiliency posture reflects resource properties observed in Azure Resource Graph inventory. It does NOT include:

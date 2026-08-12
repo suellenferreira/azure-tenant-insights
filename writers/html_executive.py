@@ -60,8 +60,12 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
 
     # Chart data
     advisor_by_pillar = summary.get("advisor_by_pillar", {})
-    pillar_labels = json.dumps(list(advisor_by_pillar.keys()))
-    pillar_values = json.dumps(list(advisor_by_pillar.values()))
+    waf_pillars = [
+        "Reliability", "Security", "Cost Optimization",
+        "Operational Excellence", "Performance Efficiency",
+    ]
+    pillar_labels = json.dumps(waf_pillars)
+    pillar_values = json.dumps([advisor_by_pillar.get(pillar, 0) for pillar in waf_pillars])
 
     top_types = summary.get("top_resource_types", [])[:8]
     type_labels = json.dumps([t[0].split("/")[-1].title() for t in top_types])
@@ -81,6 +85,9 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
     from processors.modernization import build_modernization_assessment
     modernization = build_modernization_assessment(scan_data)
     modernization_html = _build_modernization_exec_html(modernization)
+    evidence_summary_html = _build_executive_evidence_summary(
+        summary, defender_data, misconfig_findings, modernization, advisor_by_pillar
+    )
 
     # Regional distribution analysis
     region_summary = _analyze_regions(resources_by_type)
@@ -117,6 +124,7 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
     zt_exec_html = _build_zero_trust_executive_html(misconfig_findings)
     defender_high = sum(1 for d in defender_data if d.get("severity") == "High")
     defender_total = len(defender_data)
+    defender_plan_counts = _defender_plan_counts(defender_posture)
 
     html = _render_html(
         scan_date=scan_date,
@@ -133,6 +141,7 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
         type_values=type_values,
         strategic_recs=strategic_recs,
         modernization_html=modernization_html,
+        evidence_summary_html=evidence_summary_html,
         resiliency_html=resiliency_html,
         region_summary=region_summary,
         deprecated_count=len(deprecated),
@@ -142,6 +151,7 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
         zt_exec_html=zt_exec_html,
         defender_high=defender_high,
         defender_total=defender_total,
+        defender_plan_counts=defender_plan_counts,
         warnings_html=warnings_html,
     )
 
@@ -209,26 +219,73 @@ def _build_top_findings(advisor_data, misconfig_findings, defender_data, max_fin
     findings = []
     for rec in [r for r in advisor_data if r.get("impact") == "High"][:max_findings]:
         findings.append({
-            "severity": "High",
+            "label": "High impact",
+            "color": "#C00000",
             "pillar": rec.get("wafPillar", ""),
             "title": rec.get("shortDescription", "")[:100],
             "source": "Azure Advisor",
         })
     for f in [x for x in misconfig_findings if x.get("severity") in ("Critical", "High")][:max_findings]:
         findings.append({
-            "severity": f.get("severity"),
+            "label": f.get("severity", "Unknown"),
+            "color": {"Critical": "#C00000", "High": "#FF4444", "Medium": "#FFC000", "Low": "#70AD47"}.get(f.get("severity"), "#999"),
             "pillar": f.get("wafPillar", ""),
             "title": f.get("title", ""),
             "source": "Configuration Assessment",
         })
     for a in [x for x in defender_data if x.get("severity") == "High"][:max_findings]:
         findings.append({
-            "severity": "High",
+            "label": "High severity",
+            "color": "#FF4444",
             "pillar": "Security",
             "title": a.get("displayName", "")[:100],
             "source": "Defender for Cloud",
         })
     return findings[:max_findings]
+
+
+def _defender_plan_counts(defender_posture: list) -> Dict[str, int]:
+    observed = len(defender_posture or [])
+    disabled = sum(1 for plan in (defender_posture or []) if not bool(plan.get("enabled")))
+    return {"observed": observed, "disabled": disabled}
+
+
+def _top_waf_pillars(advisor_by_pillar: dict, limit: int = 3) -> str:
+    items = sorted(
+        ((pillar, count) for pillar, count in (advisor_by_pillar or {}).items()),
+        key=lambda item: (-item[1], item[0]),
+    )
+    items = [item for item in items if item[1] > 0][:limit]
+    if not items:
+        return "No WAF pillar records were returned by the collected sources."
+    return ", ".join(f"{pillar} ({count})" for pillar, count in items)
+
+
+def _build_executive_evidence_summary(summary: dict, defender_data: list,
+                                                                            misconfig_findings: list, modernization: dict, advisor_by_pillar: dict) -> str:
+        """Build a factual, aggregate-only executive summary from collected data."""
+        defender_by_severity = Counter(item.get("severity", "Unknown") for item in defender_data)
+        misconfig_by_severity = Counter(item.get("severity", "Unknown") for item in misconfig_findings)
+        advisor_by_impact = summary.get("advisor_by_impact", {})
+        observed_profile = (modernization.get("summary", {}) or {}).get("as_is", {})
+
+        cards = [
+                ("Scan Coverage", f"{summary.get('total_subscriptions', 0)} subscriptions, {summary.get('total_resources', 0):,} resources, and {summary.get('total_regions', 0)} active regions."),
+                ("Security Signals", f"Defender for Cloud returned {defender_by_severity.get('High', 0)} High, {defender_by_severity.get('Medium', 0)} Medium, and {defender_by_severity.get('Low', 0)} Low severity assessments. Configuration assessment returned {misconfig_by_severity.get('Critical', 0)} Critical and {misconfig_by_severity.get('High', 0)} High severity findings."),
+                ("Governance Signals", f"Policy Insights returned {summary.get('total_non_compliant_policies', 0)} non-compliant policy records; tags were present on {summary.get('tag_coverage_pct', 0)}% of inventoried resources."),
+                ("Advisor and Platform", f"Azure Advisor returned {summary.get('total_advisor_recommendations', 0)} recommendations ({advisor_by_impact.get('High', 0)} High impact). The observed platform profile contains {observed_profile.get('paas_pct', 0)}% PaaS and {observed_profile.get('iaas_pct', 0)}% IaaS resources; {summary.get('total_deprecated', 0)} deprecated or retiring resource matches were identified."),
+                ("WAF Pillar Profile", f"The WAF pillar profile reflects collected recommendation records with WAF pillar metadata. Highest-volume pillars: {_top_waf_pillars(advisor_by_pillar)}."),
+        ]
+        cards_html = "".join(
+                f'<div class="evidence-card"><h3>{title}</h3><p>{text}</p></div>'
+                for title, text in cards
+        )
+        return f"""
+        <div class="section" id="evidence-summary">
+            <h2>Executive Evidence Summary</h2>
+            <p class="evidence-note">Observed scan results only. Supporting evidence is available in the Technical Report and the AdvisorFindings, PolicyCompliance, SecurityAssessments, and ResiliencyEvidence worksheets.</p>
+            <div class="evidence-grid">{cards_html}</div>
+        </div>"""
 
 
 def _build_strategic_recommendations(summary, deprecated, misconfig_findings, defender_data) -> List[dict]:
@@ -721,7 +778,7 @@ def _build_modernization_exec_html(assessment: dict) -> str:
     </h2>
     <p class="mod-narr">{summary.get("narrative", "")}</p>
 
-    <h3 class="mod-h3">1 · Current Environment (As-Is)</h3>
+    <h3 class="mod-h3">1 · Observed Platform Profile</h3>
     <div class="mod-kpis">{chips_html}</div>
         <div class="two-col">
             <div>
@@ -732,7 +789,7 @@ def _build_modernization_exec_html(assessment: dict) -> str:
       <div><div class="mod-sub">Resources by business pillar</div><div class="chart-box" style="height:240px"><canvas id="modPillarChart"></canvas></div></div>
     </div>
 
-    <h3 class="mod-h3">2 · Modernization Opportunities</h3>
+    <h3 class="mod-h3">2 · Modernization Opportunities <small>(INFERRED)</small></h3>
     <div class="mod-legend">
       <span><i style="background:#C00000"></i>Lower score = higher opportunity (0–33)</span>
       <span><i style="background:#C55A11"></i>Intermediate (34–66)</span>
@@ -872,23 +929,23 @@ def _build_resiliency_exec_html(assessment: dict) -> str:
 def _render_html(
     scan_date, tenant_id, tenant_name, subscriptions_list, summary, risk_level, risk_color,
     top_findings, pillar_labels, pillar_values,
-    type_labels, type_values, strategic_recs, modernization_html, resiliency_html, region_summary, deprecated_count,
+    type_labels, type_values, strategic_recs, modernization_html, evidence_summary_html, resiliency_html, region_summary, deprecated_count,
     lz_exec_html="", defender_exec_html="", defender_posture_exec_html="", zt_exec_html="",
     defender_high=0, defender_total=0,
+    defender_plan_counts=None,
     warnings_html="",
 ) -> str:
-    SEV_COLORS = {"Critical": "#C00000", "High": "#FF4444", "Medium": "#FFC000", "Low": "#70AD47"}
     PRI_COLORS = {"Critical": "#C00000", "High": "#FF4444", "Medium": "#FFC000", "Low": "#70AD47"}
 
     findings_html = "".join(
         f"""<div class="finding-card">
-            <span class="badge" style="background:{SEV_COLORS.get(f.get('severity',''),'#999')}">{f.get('severity','')}</span>
+            <span class="badge" style="background:{f.get('color','#999')}">{f.get('label','')}</span>
             <span class="badge badge-pillar">{f.get('pillar','')}</span>
             <p class="finding-title">{f.get('title','')}</p>
             <small class="finding-source">{f.get('source','')}</small>
         </div>"""
         for f in top_findings
-    ) or '<p class="no-data">No critical findings detected. Environment appears healthy.</p>'
+    ) or '<p class="no-data">No high-impact or high-severity findings were returned by the collected sources.</p>'
     if top_findings:
         findings_html = f'<div id="findings-cards" data-paginate-cards="5" data-page-step="5">{findings_html}</div>'
 
@@ -913,6 +970,7 @@ def _render_html(
     )
 
     kpi = summary
+    defender_plan_counts = defender_plan_counts or {"observed": 0, "disabled": 0}
     risk_pct = summary.get("critical_findings_pct", 0)
     risk_tooltip_html = (
         '<details style="margin:.4rem auto 1rem;max-width:640px;font-size:.78rem;color:#888;text-align:left;'
@@ -953,6 +1011,7 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 .kpi-lbl{{font-size:.8rem;color:#666;margin-top:.4rem;font-weight:500;text-transform:uppercase;letter-spacing:.05em}}
 .section{{background:#fff;border-radius:12px;padding:1.8rem;margin:1.5rem 0;box-shadow:0 2px 8px rgba(0,0,0,.06)}}
 .section h2{{font-size:1.25rem;color:#1F4E79;border-bottom:2px solid #e8f0f7;padding-bottom:.7rem;margin-bottom:1.2rem}}
+.section>summary{{cursor:pointer;color:#1F4E79;font-size:1.05rem}}
 .two-col{{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}}
 .chart-box{{position:relative;height:260px}}
 .finding-card{{border-left:4px solid #ddd;padding:.8rem 1rem;margin:.5rem 0;background:#fafafa;border-radius:0 8px 8px 0}}
@@ -1017,6 +1076,11 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 .pg-info{{font-size:.75rem;color:#888}}
 .toggle-btn:hover{{background:#2E86AB;color:#fff}}
 .rec-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}}
+.evidence-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem}}
+.evidence-card{{border:1px solid #e0e8f0;border-top:4px solid #2E86AB;border-radius:8px;padding:1rem;background:#fafcff}}
+.evidence-card h3{{font-size:.88rem;color:#1F4E79;margin-bottom:.45rem}}
+.evidence-card p,.evidence-note{{font-size:.82rem;color:#555;line-height:1.5}}
+.evidence-note{{margin:-.35rem 0 1rem}}
 .footer{{text-align:center;padding:2rem;color:#888;font-size:.82rem}}
 .report-badge{{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);padding:.25rem 1rem;border-radius:20px;font-size:.82rem;display:inline-block;margin-top:.5rem}}
 .sidebar{{position:fixed;left:0;top:0;width:220px;height:100vh;background:#1a3a5c;color:#fff;padding:1rem 0;overflow-y:auto;z-index:100}}
@@ -1035,6 +1099,7 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
   <div class="sidebar-logo">📊 ATI Executive</div>
   <h3>Overview</h3>
   <a href="#overview">📈 Key Metrics</a>
+    <a href="#evidence-summary">📋 Evidence Summary</a>
   <a href="#charts">📊 Charts</a>
   <a href="#regions">🌍 Regions</a>
   <h3>Modernization</h3>
@@ -1068,24 +1133,28 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
   {dep_alert}
   <div class="risk-banner">Overall Environment Risk Level: {risk_level}</div>
   <div style="text-align:center">{risk_tooltip_html}</div>
+    {evidence_summary_html}
 
   <div class="kpi-grid" id="overview">
     <div class="kpi-card"><div class="kpi-val">{kpi.get('total_resources',0):,}</div><div class="kpi-lbl">Total Resources</div></div>
     <div class="kpi-card"><div class="kpi-val">{kpi.get('total_subscriptions',0)}</div><div class="kpi-lbl">Subscriptions</div></div>
-    <div class="kpi-card"><div class="kpi-val">{kpi.get('total_resource_types',0)}</div><div class="kpi-lbl">Resource Types</div></div>
     <div class="kpi-card"><div class="kpi-val">{kpi.get('total_regions',0)}</div><div class="kpi-lbl">Active Regions</div></div>
     <div class="kpi-card warn"><div class="kpi-val">{kpi.get('total_advisor_recommendations',0)}</div><div class="kpi-lbl">Advisor Recommendations</div></div>
-    <div class="kpi-card {'crit' if kpi.get('critical_findings_count',0)>0 else 'ok'}"><div class="kpi-val">{kpi.get('critical_findings_count',0)}</div><div class="kpi-lbl">Critical Findings</div></div>
+    <div class="kpi-card {'crit' if kpi.get('critical_findings_count',0)>0 else 'ok'}"><div class="kpi-val">{kpi.get('critical_findings_count',0)}</div><div class="kpi-lbl" title="Combined count: High/Critical configuration findings + High-severity Defender for Cloud assessments. Not a unique-resource count.">High/Critical Security Signals</div></div>
     <div class="kpi-card {'crit' if kpi.get('total_deprecated',0)>0 else 'ok'}"><div class="kpi-val">{kpi.get('total_deprecated',0)}</div><div class="kpi-lbl">Deprecated Resources</div></div>
     <div class="kpi-card {'warn' if kpi.get('tag_coverage_pct',100)<80 else 'ok'}"><div class="kpi-val">{kpi.get('tag_coverage_pct',0)}%</div><div class="kpi-lbl">Tag Coverage</div></div>
-    <div class="kpi-card {'crit' if defender_high>0 else 'ok'}"><div class="kpi-val">{defender_high}</div><div class="kpi-lbl">Defender High</div></div>
-    <div class="kpi-card {'warn' if defender_total>0 else 'ok'}"><div class="kpi-val">{defender_total}</div><div class="kpi-lbl">Defender Findings</div></div>
+    <div class="kpi-card {'warn' if kpi.get('total_non_compliant_policies',0)>0 else 'ok'}"><div class="kpi-val">{kpi.get('total_non_compliant_policies',0)}</div><div class="kpi-lbl">Non-Compliant Policy Records</div></div>
+    <div class="kpi-card {'warn' if defender_plan_counts.get('observed',0)==0 else 'ok'}"><div class="kpi-val">{defender_plan_counts.get('observed',0)}</div><div class="kpi-lbl">Defender Plans Observed</div></div>
+    <div class="kpi-card {'crit' if defender_plan_counts.get('disabled',0)>0 else 'ok'}"><div class="kpi-val">{defender_plan_counts.get('disabled',0)}</div><div class="kpi-lbl">Disabled Defender Plans</div></div>
   </div>
 
-  <div class="two-col" id="charts">
-    <div class="section"><h2>Advisor Recommendations by WAF Pillar</h2><div class="chart-box"><canvas id="pillarChart"></canvas></div></div>
-    <div class="section"><h2>Top Resource Types</h2><div class="chart-box"><canvas id="typeChart"></canvas></div></div>
-  </div>
+    <details id="charts" class="section">
+        <summary><strong>Supporting Charts</strong></summary>
+        <div class="two-col" style="margin-top:1rem">
+            <div><h2>WAF Finding Profile</h2><p class="evidence-note">Azure Advisor recommendation counts across all five Well-Architected Framework pillars.</p><div class="chart-box"><canvas id="pillarChart"></canvas></div></div>
+            <div><h2>Top Resource Types</h2><div class="chart-box"><canvas id="typeChart"></canvas></div></div>
+        </div>
+    </details>
 
   <div class="section" id="regions"><h2>🌍 Active Regions Distribution</h2><div class="chart-box" style="height:250px"><canvas id="regionChart"></canvas></div></div>
 
@@ -1093,34 +1162,38 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 
     {resiliency_html}
 
-  <div class="section" id="landing-zone">
-    <h2>🏗 Landing Zone Observations
+    <details class="section" id="landing-zone">
+        <summary><strong>🏗 Landing Zone Observations</strong></summary>
+        <div style="margin-top:1rem"><h2>Landing Zone Observations
       <small style="font-size:.72rem;color:#888;font-weight:normal;margin-left:.5rem">(Condensed — top action items. See Technical Report for full analysis.)</small>
     </h2>
     <p style="font-size:.82rem;color:#666;margin-bottom:.8rem">Key infrastructure gaps identified against the Azure Cloud Adoption Framework landing zone design areas. Warnings only — positive observations are available in the Technical Report.</p>
-    {lz_exec_html}
-  </div>
+        {lz_exec_html}</div>
+    </details>
 
   <div class="section" id="findings"><h2>Top Priority Findings</h2>{findings_html}</div>
   <div class="section" id="recommendations"><h2>Strategic Recommendations</h2><div class="rec-grid">{recs_html}</div></div>
 
-  <div class="section" id="defender-posture">
-    <h2>🛡 Defender for Cloud — Plan Posture</h2>
+    <details class="section" id="defender-posture" open>
+        <summary><strong>🛡 Defender for Cloud — Plan Posture</strong></summary>
+        <div style="margin-top:1rem"><h2>Defender for Cloud — Plan Posture</h2>
     <p style="font-size:.82rem;color:#666;margin-bottom:.8rem">Defender plan enablement per subscription (<strong>Microsoft.Security/pricings</strong>). VMs / VMSS / Arc are evaluated per-resource; other workloads at subscription scope. Requires only <strong>Reader</strong> RBAC.</p>
-    {defender_posture_exec_html}
-  </div>
+        {defender_posture_exec_html}</div>
+    </details>
 
-  <div class="section" id="defender">
-    <h2>🔒 Defender for Cloud — Executive Summary</h2>
+    <details class="section" id="defender">
+        <summary><strong>🔒 Defender for Cloud — Executive Summary</strong></summary>
+        <div style="margin-top:1rem"><h2>Defender for Cloud — Executive Summary</h2>
     <p style="font-size:.82rem;color:#666;margin-bottom:.8rem">Microsoft Defender for Cloud security posture. Requires <strong>Security Reader</strong> RBAC on SecurityResources.</p>
-    {defender_exec_html}
-  </div>
+        {defender_exec_html}</div>
+    </details>
 
-    <div class="section" id="zerotrust">
-        <h2>🛡 Zero Trust Security Posture — Executive Summary</h2>
+    <details class="section" id="zerotrust">
+        <summary><strong>🛡 Zero Trust Security Posture</strong></summary>
+        <div style="margin-top:1rem"><h2>Zero Trust Security Posture — Executive Summary</h2>
         <p style="font-size:.82rem;color:#666;margin-bottom:.8rem">Findings grouped by Zero Trust principles: Verify Explicitly, Use Least Privilege, and Assume Breach.</p>
-        {zt_exec_html}
-    </div>
+        {zt_exec_html}</div>
+    </details>
 </div>
 <div class="footer">
   Azure Tenant Insights v1.0.0 &mdash; Executive Report &mdash; {scan_date}<br>
@@ -1199,7 +1272,12 @@ function _renderCardPage(id){{
   var bar=document.getElementById('pgbar-'+id);if(!bar)return;
   bar.innerHTML='';
   if(st.shown>=total){{
-    if(total>st.size){{var sa=document.createElement('span');sa.className='pg-info';sa.textContent='Showing all '+total+' finding(s)';bar.appendChild(sa);}}
+        if(total>st.size){{
+            var sa=document.createElement('span');sa.className='pg-info';sa.textContent='Showing all '+total+' finding(s)';bar.appendChild(sa);
+            var less=document.createElement('button');less.className='pg-btn ghost';less.textContent='Show less';
+            less.addEventListener('click',function(){{st.shown=st.size;_renderCardPage(id);}});
+            bar.appendChild(less);
+        }}
     return;
   }}
   var next=Math.min(st.step,total-st.shown);
@@ -1208,7 +1286,13 @@ function _renderCardPage(id){{
   var b2=document.createElement('button');b2.className='pg-btn ghost';b2.textContent='Show all ('+total+')';
   b2.addEventListener('click',function(){{st.shown=total;_renderCardPage(id);}});
   var si=document.createElement('span');si.className='pg-info';si.textContent='Showing '+st.shown+' of '+total;
-  bar.appendChild(b1);bar.appendChild(b2);bar.appendChild(si);
+    bar.appendChild(b1);bar.appendChild(b2);
+    if(st.shown>st.size){{
+        var less=document.createElement('button');less.className='pg-btn ghost';less.textContent='Show less';
+        less.addEventListener('click',function(){{st.shown=st.size;_renderCardPage(id);}});
+        bar.appendChild(less);
+    }}
+    bar.appendChild(si);
 }}
 document.addEventListener('DOMContentLoaded',initCardPagination);
 </script>

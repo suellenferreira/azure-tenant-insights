@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Executive/Technical Report and Excel Refinements**
+- Executive HTML now includes a factual **Executive Evidence Summary**, a separate WAF Pillar Profile, Defender plan posture KPIs, and the renamed **High/Critical Security Signals** KPI with explanatory tooltip.
+- Technical HTML top KPI cards now include subscriptions, High/Critical Security Signals, Defender Plans Observed, Disabled Defender Plans, and Non-Compliant Policy Records.
+- HTML pagination now supports **Show less** after `Load More` / `Show all` expansion for paginated tables and cards.
+- Excel `Classification` now includes **BY TECHNICAL CATEGORY** distribution next to Service Model and Business Pillar summaries.
+- Excel `ModernizationSignals` now receives populated Technical Category counts and percentages from the modernization as-is summary.
+- Excel `ResiliencyEvidence` now includes regional matrices by Service Model, Business Pillar, and Technical Category.
+
 **Phase 3A: Resource Classification Taxonomy Refinement & Technical Report Enhancements**
 - `config/resource_classification.yaml`: Added type-exact overrides for Azure Container Registry (ACR) resources to enable sub-namespace granularity:
   - `microsoft.containerregistry/registries` → Technical Category: "Compute - Containers - Registry" (Business Pillar: Compute, Service Model: PaaS)

@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 jobs:
   review:
@@ -20,8 +21,33 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: python scripts/catalog_maintenance.py docs/catalog-maintenance-report.md
+      - name: Analyze catalogs
+        id: catalog_review
+        run: python scripts/catalog_maintenance.py docs/catalog-maintenance-report.md --github-output "$GITHUB_OUTPUT"
+      - name: Publish workflow summary
+        run: cat docs/catalog-maintenance-report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Ensure review label
+        if: steps.catalog_review.outputs.actionable == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh label create catalog-review --color D4A72C --description "Catalog evidence requires maintainer review" --force
+      - name: Find existing catalog review
+        id: existing_review
+        if: steps.catalog_review.outputs.actionable == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          number=$(gh pr list --state open --label catalog-review --json number --jq '.[0].number // empty')
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+      - name: Notify existing review
+        if: steps.catalog_review.outputs.actionable == 'true' && steps.existing_review.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.existing_review.outputs.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" --body "A new monthly catalog analysis found actionable items. Review the latest workflow summary: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - name: Open review pull request
+        if: steps.catalog_review.outputs.actionable == 'true' && steps.existing_review.outputs.number == ''
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: automation/catalog-review-${{ github.run_id }}
@@ -32,4 +58,7 @@ jobs:
           git add docs/catalog-maintenance-report.md
           git commit -m "chore: monthly catalog maintenance review"
           git push --set-upstream origin "$BRANCH"
-          gh pr create --base main --head "$BRANCH" --title "Monthly catalog maintenance review" --body "Review catalog freshness, source URLs, and validation findings. This PR does not update catalog rules automatically."
+          gh pr create --base main --head "$BRANCH" --label catalog-review \
+            --assignee "$GITHUB_REPOSITORY_OWNER" \
+            --title "Monthly catalog maintenance review" \
+            --body "Review the actionable catalog findings and complete the decision/checklist in the generated report. This PR does not update catalog rules automatically."

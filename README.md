@@ -624,7 +624,11 @@ Defines local heuristic configuration checks for specific resource types. Rules 
 
 ### Catalog updates
 
-Adopt updated catalogs through a reviewed ATI release, controlled `git pull`, or fresh clone. Validate the change before customer use. The official repository runs `.github/workflows/catalog-maintenance.yml` monthly to generate a review-only PR. Its job is restricted to `suellenferreira/azure-tenant-insights`; customer clones and scans remain offline and pinned to their local catalog version.
+Adopt updated catalogs through a reviewed ATI release, controlled `git pull`, or fresh clone. Validate the change before customer use. The official repository runs `.github/workflows/catalog-maintenance.yml` monthly. It publishes the report in the workflow summary and opens a review PR only for actionable findings such as stale catalogs, missing/invalid files, or source URLs requiring review. The report identifies the affected catalog, evidence, expected reviewer action, decision options, and a completion checklist; it never updates rules automatically.
+
+The review PR is assigned to the canonical repository owner. `.github/workflows/catalog-review-followup.yml` checks open `catalog-review` PRs weekly: it updates one reminder comment after 7 days, adds `catalog-review-overdue` after 14 days, and creates an assigned tracking issue after 30 days. The issue closes automatically when the PR is completed. Both jobs are restricted to `suellenferreira/azure-tenant-insights`; customer clones and scans remain offline and pinned to their local catalog version.
+
+Repository administrators must enable **Settings > Actions > General > Workflow permissions > Allow GitHub Actions to create and approve pull requests** for automated review PR creation.
 
 ---
 

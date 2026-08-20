@@ -1,17 +1,49 @@
-"""Generate a review-only report for ATI's version-controlled catalogs."""
+"""Generate an actionable, review-only report for ATI's local catalogs."""
 
-from datetime import datetime, timezone
+from __future__ import annotations
+
+import argparse
+from datetime import date, datetime, timezone
+import hashlib
 import json
 from pathlib import Path
-import sys
-from typing import Any, Iterable
+from typing import Any, Dict, Iterable, Optional
 
 import requests
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG = ROOT / "config"
-MANIFEST = CONFIG / "catalog_metadata.json"
+DECISION_OPTIONS = ("confirmed", "update_required", "false_alarm", "source_unavailable")
+
+REVIEW_GUIDANCE = {
+    "deprecated_types": (
+        "Confirm the retirement date, current status, replacement service, announcement URL, "
+        "and migration path against Microsoft sources."
+    ),
+    "misconfiguration_rules": (
+        "Confirm the condition, expected value, severity, evidence wording, and Microsoft "
+        "documentation URL; keep heuristic findings distinct from Policy and Defender results."
+    ),
+    "drawio_stencils": (
+        "Confirm each stencil path exists in the supported diagrams.net library and that an "
+        "appropriate generic fallback remains available."
+    ),
+    "modernization_signals": (
+        "Confirm signal criteria, confidence language, opportunity interpretation, and source links."
+    ),
+    "resource_classification": (
+        "Confirm resource-type mappings, precedence, Service Model, Business Pillar, and technical category."
+    ),
+    "resource_enrichment": (
+        "Confirm projected Resource Graph/ARM property paths and the rules that consume promoted fields."
+    ),
+    "network_placement": (
+        "Confirm resource relationship properties, placement behavior, and fallback topology handling."
+    ),
+    "security_overlay": (
+        "Confirm severity colors, finding mappings, Zero Trust references, and visual fallback behavior."
+    ),
+}
 
 
 def _walk_urls(value: Any) -> Iterable[str]:
@@ -41,57 +73,234 @@ def _url_status(url: str) -> str:
         return f"ERROR: {type(error).__name__}"
 
 
-def generate_report(output: Path, check_urls: bool = True) -> int:
-    manifest = _load(MANIFEST)
-    rows = []
-    urls = set()
-    errors = []
-    today = datetime.now(timezone.utc).date()
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _finding(catalog: Dict[str, Any], issue: str, evidence: str, priority: str) -> Dict[str, str]:
+    catalog_id = catalog.get("id", "unknown")
+    return {
+        "catalog_id": catalog_id,
+        "catalog": catalog.get("display_name", catalog_id),
+        "file": catalog.get("file", ""),
+        "issue": issue,
+        "evidence": evidence,
+        "priority": priority,
+        "source": catalog.get("source", ""),
+        "recommended_action": REVIEW_GUIDANCE.get(
+            catalog_id,
+            "Review the catalog content and source evidence, update it if required, then run tests.",
+        ),
+    }
+
+
+def analyze_catalogs(
+    root: Path = ROOT,
+    check_urls: bool = True,
+    today: Optional[date] = None,
+) -> Dict[str, Any]:
+    config = root / "config"
+    current_date = today or datetime.now(timezone.utc).date()
+    manifest_path = config / "catalog_metadata.json"
+    try:
+        manifest = _load(manifest_path)
+        if not isinstance(manifest, dict):
+            raise ValueError("Catalog manifest root must be an object.")
+        review_due_days = int(manifest["review_due_days"])
+        stale_days = int(manifest["stale_days"])
+        if review_due_days <= 0 or stale_days <= review_due_days:
+            raise ValueError("Freshness thresholds are invalid.")
+    except (json.JSONDecodeError, yaml.YAMLError, OSError, UnicodeError, TypeError, ValueError, KeyError) as error:
+        finding = _finding(
+            {
+                "id": "catalog_manifest",
+                "display_name": "Catalog manifest",
+                "file": "catalog_metadata.json",
+            },
+            "Invalid catalog manifest",
+            str(error),
+            "critical",
+        )
+        return {
+            "catalog_version": "unknown",
+            "generated_at": current_date.isoformat(),
+            "catalogs": [],
+            "findings": [finding],
+            "checked_urls": 0,
+            "actionable": True,
+            "decision_options": DECISION_OPTIONS,
+        }
+    catalogs = []
+    findings = []
+    checked_urls = 0
 
     for item in manifest.get("catalogs", []):
-        path = CONFIG / item["file"]
+        path = config / item["file"]
         if not path.is_file():
-            errors.append(f"Missing catalog: {item['file']}")
+            findings.append(_finding(item, "Missing catalog", str(path), "critical"))
             continue
-        data = _load(path)
-        urls.update(_walk_urls(data))
-        age = max((today - datetime.fromisoformat(item["last_verified"]).date()).days, 0)
-        state = "stale" if age > manifest["stale_days"] else (
-            "review_due" if age > manifest["review_due_days"] else "current"
-        )
-        rows.append((item["display_name"], item["file"], item["last_verified"], age, state))
 
-    url_rows = [(url, _url_status(url)) for url in sorted(urls)] if check_urls else []
-    failed_urls = [row for row in url_rows if not row[1].startswith(("2", "3"))]
-    lines = [
+        try:
+            data = _load(path)
+        except (json.JSONDecodeError, yaml.YAMLError, OSError, UnicodeError) as error:
+            findings.append(_finding(item, "Invalid catalog", str(error), "critical"))
+            continue
+
+        try:
+            verified = date.fromisoformat(item["last_verified"])
+        except (KeyError, TypeError, ValueError) as error:
+            findings.append(
+                _finding(item, "Invalid last_verified date", str(error), "critical")
+            )
+            continue
+        age = max((current_date - verified).days, 0)
+        state = "stale" if age > stale_days else (
+            "review_due" if age > review_due_days else "current"
+        )
+        catalogs.append({**item, "age_days": age, "status": state, "sha256": _sha256(path)})
+
+        if state != "current":
+            findings.append(
+                _finding(
+                    item,
+                    f"Catalog is {state}",
+                    f"Last verified {item['last_verified']} ({age} days ago)",
+                    "high" if state == "stale" else "normal",
+                )
+            )
+
+        if check_urls:
+            source_urls = {item["source"]} if str(item.get("source", "")).startswith("http") else set()
+            for url in sorted(set(_walk_urls(data)) | source_urls):
+                checked_urls += 1
+                status = _url_status(url)
+                if not status.startswith(("2", "3")):
+                    findings.append(
+                        _finding(item, "Source URL requires review", f"{status} {url}", "normal")
+                    )
+
+    return {
+        "catalog_version": manifest.get("catalog_version", "unknown"),
+        "generated_at": current_date.isoformat(),
+        "catalogs": catalogs,
+        "findings": findings,
+        "checked_urls": checked_urls,
+        "actionable": bool(findings),
+        "decision_options": DECISION_OPTIONS,
+    }
+
+
+def _source_reference(source: str) -> str:
+    return f"[source]({source})" if source.startswith(("http://", "https://")) else source or "-"
+
+
+def _report_lines(result: Dict[str, Any]) -> list[str]:
+    catalog_rows = [
+        f"| {item['display_name']} | `{item['file']}` | {item['last_verified']} | "
+        f"{item['age_days']} | {item['status']} | `{item['sha256'][:12]}` |"
+        for item in result["catalogs"]
+    ]
+    finding_rows = [
+        f"| {finding['priority']} | [{finding['catalog']}](../config/{finding['file']}) | "
+        f"{finding['issue']} | {finding['evidence']} | "
+        f"{_source_reference(str(finding['source']))} | "
+        f"{finding['recommended_action']} |"
+        for finding in result["findings"]
+    ] or ["| - | - | No actionable findings | - | - | No catalog changes required. |"]
+    decision_sections = []
+    for index, finding in enumerate(result["findings"], 1):
+        decision_sections.extend(
+            [
+                f"### {index}. {finding['catalog']} — {finding['issue']}",
+                "",
+                *[f"- [ ] `{option}`" for option in result["decision_options"]],
+                "",
+            ]
+        )
+    if not decision_sections:
+        decision_sections = ["No reviewer decision is required for this run.", ""]
+
+    return [
         "# ATI Catalog Maintenance Report",
         "",
-        f"Generated (UTC): {today.isoformat()}",
-        f"Catalog version: `{manifest.get('catalog_version', 'unknown')}`",
+        f"Generated (UTC): {result['generated_at']}",
+        f"Catalog version: `{result['catalog_version']}`",
+        f"Actionable review required: **{'yes' if result['actionable'] else 'no'}**",
         "",
-        "This report is review-only. It does not update catalog rules.",
+        "This report is review-only. It does not update catalog rules, verification dates, or production content.",
         "",
-        "## Catalog Freshness",
+        "## Catalog Freshness and Integrity",
         "",
-        "| Catalog | File | Last verified | Age (days) | Status |",
-        "|---|---|---:|---:|---|",
-        *[f"| {name} | `{file}` | {verified} | {age} | {state} |" for name, file, verified, age, state in rows],
+        "| Catalog | File | Last verified | Age (days) | Status | SHA-256 |",
+        "|---|---|---:|---:|---|---|",
+        *catalog_rows,
         "",
-        "## Validation",
+        "## Actionable Findings",
         "",
-        f"- Missing or invalid catalogs: {len(errors)}",
-        f"- URLs checked: {len(url_rows)}",
-        f"- URLs requiring review: {len(failed_urls)}",
+        "| Priority | Catalog | Issue | Evidence | Source | Recommended action |",
+        "|---|---|---|---|---|---|",
+        *finding_rows,
         "",
-        *[f"- {error}" for error in errors],
-        *[f"- `{status}` {url}" for url, status in failed_urls],
+        "## Reviewer Decision",
+        "",
+        "Record one decision for each actionable item:",
+        "",
+        *decision_sections,
+        "## Review Checklist",
+        "",
+        "- [ ] Open the affected catalog and source links listed above.",
+        "- [ ] Confirm whether the source meaning changed, not only whether the URL responds.",
+        "- [ ] Update catalog content only when supported by reviewed evidence.",
+        "- [ ] Update `last_verified` only after semantic review is complete.",
+        "- [ ] Run catalog and project tests; inspect the diff for changed findings or mappings.",
+        "- [ ] Obtain review approval before merge and include changes in a versioned release.",
+        "",
+        "## Validation Summary",
+        "",
+        f"- Catalogs parsed: {len(result['catalogs'])}",
+        f"- URLs checked: {result['checked_urls']}",
+        f"- Actionable findings: {len(result['findings'])}",
         "",
     ]
+
+
+def generate_report(
+    output: Path,
+    check_urls: bool = True,
+    root: Path = ROOT,
+    today: Optional[date] = None,
+) -> int:
+    result = analyze_catalogs(root=root, check_urls=check_urls, today=today)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text("\n".join(lines), encoding="utf-8")
-    return 1 if errors else 0
+    output.write_text("\n".join(_report_lines(result)), encoding="utf-8")
+    return 0
+
+
+def _write_github_output(path: Optional[Path], actionable: bool) -> None:
+    if path:
+        with path.open("a", encoding="utf-8") as output:
+            output.write(f"actionable={'true' if actionable else 'false'}\n")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "output",
+        nargs="?",
+        type=Path,
+        default=ROOT / "docs" / "catalog-maintenance-report.md",
+    )
+    parser.add_argument("--offline", action="store_true", help="Skip source URL checks.")
+    parser.add_argument("--github-output", type=Path, help="Write actionable state for GitHub Actions.")
+    args = parser.parse_args()
+
+    result = analyze_catalogs(check_urls=not args.offline)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text("\n".join(_report_lines(result)), encoding="utf-8")
+    _write_github_output(args.github_output, result["actionable"])
+    print(f"Catalog review actionable: {result['actionable']}")
+    return 0
 
 
 if __name__ == "__main__":
-    target = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "docs" / "catalog-maintenance-report.md"
-    raise SystemExit(generate_report(target, check_urls="--offline" not in sys.argv))
+    raise SystemExit(main())

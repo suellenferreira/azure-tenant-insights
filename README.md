@@ -17,6 +17,7 @@
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Customer Data Handling and Usage Disclaimer](#customer-data-handling-and-usage-disclaimer)
 - [Usage](#usage)
 - [Parameters Reference](#parameters-reference)
 - [RBAC Requirements](#rbac-requirements)
@@ -292,6 +293,18 @@ python invoke_ati.py --tenant-id <TENANT-ID> --subscription-id <SUBSCRIPTION-ID>
 Output files are saved to `./AzureTenantInsights/` by default.
 
 > **Data handling:** generated reports contain tenant, subscription, resource inventory, posture, and possibly cost data. Treat them as sensitive operational artifacts; do not commit, publish, or share them outside approved storage.
+
+---
+
+## Customer Data Handling and Usage Disclaimer
+
+ATI is an open-source, read-only assessment accelerator. It is not an official Microsoft product, compliance certification, or substitute for a formal architecture, security, financial, regulatory, or legal review. ATI does not modify Azure resources or perform automatic remediation.
+
+ATI runs with an identity, Azure permissions, and assessment scope selected and controlled by the customer. Generated Excel, HTML, and draw.io reports are written only to the local output directory or storage destination selected for the execution. ATI does not upload or transfer generated report contents elsewhere. Because outputs may contain sensitive Azure environment metadata, the customer should approve their storage location, access, retention, and distribution according to applicable policies.
+
+Results are point-in-time and may be incomplete because of permissions, API availability, throttling, or excluded collectors. Some observations are heuristic or based on versioned local catalogs and require validation before remediation, investment, compliance, or architectural decisions.
+
+For customer engagements, agree on the scope, customer-controlled read-only identity, output destination, and handling of generated artifacts before execution. Use the appropriate organizational legal, privacy, security, and compliance process when formal approval is required.
 
 ---
 

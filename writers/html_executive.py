@@ -1214,7 +1214,7 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 </div>
 <div class="footer">
   Azure Tenant Insights v1.0.0 &mdash; Executive Report &mdash; {scan_date}<br>
-  <small>Data sourced exclusively from Azure Resource Graph, Azure Advisor, and official Azure APIs. All findings should be validated against your organizational context.</small>
+    <small>Data sourced exclusively from Azure Resource Graph, Azure Advisor, and official Azure APIs. Generated reports remain in the output destination selected for this execution; ATI does not upload or transfer report contents elsewhere. Treat outputs as sensitive operational artifacts. All findings should be validated against your organizational context.</small>
   {warnings_html}
   <hr style="border:none;border-top:1px solid #333;margin:.8rem 0">
   <strong style="color:#ccc;font-size:.78rem">References</strong>

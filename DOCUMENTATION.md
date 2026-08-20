@@ -794,6 +794,10 @@ an initial customer assessment:
 
 ATI should be used as an evidence-gathering and prioritization tool.
 
+ATI runs with a customer-controlled identity and read-only Azure permissions against an approved scope. Generated artifacts remain in the local output directory or storage destination selected for execution; ATI does not upload or transfer generated report contents elsewhere. Outputs can contain sensitive environment metadata and should follow the customer's approved access, storage, retention, and distribution controls.
+
+ATI is an open-source accelerator, not an official Microsoft product or a substitute for formal architecture, security, financial, regulatory, legal, or compliance review. For customer engagements, confirm scope, identity, output destination, and artifact handling before execution through the appropriate organizational process.
+
 It does not:
 
 - Perform a formal compliance certification;

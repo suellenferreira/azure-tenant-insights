@@ -75,20 +75,20 @@ def get_subscriptions(
 def _get_subs_in_management_group(credential, management_group_id: str) -> set:
     """Returns the set of subscription IDs under a Management Group via Resource Graph."""
     try:
-        from azure.mgmt.resourcegraph import ResourceGraphClient
-        from azure.mgmt.resourcegraph.models import QueryRequest
+        from collectors.resource_graph import query_resource_graph
 
-        client = ResourceGraphClient(credential)
-        query = QueryRequest(
+        rows = query_resource_graph(
+            credential=credential,
             query="""
             ResourceContainers
             | where type == 'microsoft.resources/subscriptions'
             | project subscriptionId
             """,
+            subscription_ids=[],
             management_groups=[management_group_id],
+            caller="subscriptions",
         )
-        result = client.resources(query)
-        return {r["subscriptionId"] for r in (result.data or [])}
+        return {row["subscriptionId"] for row in rows if row.get("subscriptionId")}
     except Exception as e:
         logger.warning(f"Could not enumerate subscriptions in Management Group '{management_group_id}': {e}")
         return set()

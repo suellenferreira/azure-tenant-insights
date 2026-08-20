@@ -65,7 +65,7 @@ SHEET_WARN_HARD = _env_int("ATI_SHEET_WARN_HARD", 200)
 
 # Fixed sheet names — reserved so type sheets never collide with them.
 RESERVED_SHEET_NAMES = {
-    "Overview", "Index", "Classification", "ModernizationSignals", "ResiliencyEvidence", "Subscriptions",
+    "Overview", "Index", "CatalogStatus", "Classification", "ModernizationSignals", "ResiliencyEvidence", "Subscriptions",
     "AllResources", "AdvisorFindings", "PolicyCompliance", "ResourceHealth",
     "DeprecatedResources", "MisconfigFindings", "SecurityAssessments",
     "DefenderCostEstimate", "DefenderPosture", "DefenderServersCoverage",
@@ -108,6 +108,7 @@ def write_excel(scan_data: dict, output_path: str) -> None:
     sheet_map = _prepare_type_sheet_map(scan_data)
 
     _write_overview_sheet(wb, scan_data)
+    _write_catalog_status_sheet(wb, scan_data)
     _write_classification_sheet(wb, scan_data, sheet_map)
     _write_modernization_sheet(wb, scan_data)
     _write_resiliency_evidence_sheet(wb, scan_data)
@@ -408,9 +409,9 @@ def _build_sheet_name_map(sorted_types, inventory_config, budget, reserved_names
 
 def _reserved_sheet_count(scan_data: dict) -> int:
     """Number of fixed (non-type) sheets that will be created for this scan."""
-    count = 11  # Overview, Index, Classification, ModernizationSignals,
-    #             Subscriptions, AllResources, Advisor, Policy, Health,
-    #             Deprecated, Misconfig
+    count = 13  # Overview, Index, CatalogStatus, Classification, ModernizationSignals,
+    #             ResiliencyEvidence, Subscriptions, AllResources, Advisor, Policy,
+    #             Health, Deprecated, Misconfig
     if scan_data.get("defender_data"):
         count += 2  # SecurityAssessments + DefenderCostEstimate
     if scan_data.get("defender_posture"):
@@ -523,6 +524,56 @@ def _common_resource_value(resource: dict, key: str) -> Any:
 # ─────────────────────────────────────────────────────────────────────────────
 # Sheet writers
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _write_catalog_status_sheet(wb, scan_data: dict):
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    ws = wb.create_sheet("CatalogStatus", 2)
+    status = scan_data.get("catalog_status", {})
+    ws.merge_cells("A1:I2")
+    ws["A1"] = (
+        "Catalog freshness is evaluated locally on every scan. Catalogs older than "
+        f"{status.get('review_due_days', 90)} days are flagged for review and catalogs "
+        f"older than {status.get('stale_days', 180)} days are marked stale. Warnings do "
+        "not block the scan or update files automatically. No online catalog validation occurs."
+    )
+    ws["A1"].alignment = Alignment(wrap_text=True, vertical="center")
+    ws["A1"].fill = PatternFill("solid", fgColor="D9EAF7")
+    ws["A1"].font = Font(bold=True, color="1F4E79")
+    ws.row_dimensions[1].height = 34
+    headers = [
+        "Catalog", "File", "Version", "Last Verified", "Age (Days)",
+        "Status", "Evidence Level", "Source", "Used By",
+    ]
+    for col, header in enumerate(headers, 1):
+        ws.cell(row=4, column=col).value = header
+    _header_style(ws, 4, len(headers))
+    _auto_filter(ws, 4, len(headers))
+    _freeze(ws, 5)
+
+    fills = {
+        "current": "E2F0D9",
+        "review_due": "FFF2CC",
+        "stale": "F4CCCC",
+    }
+    for row, item in enumerate(status.get("catalogs", []), 5):
+        values = [
+            item.get("display_name", ""), item.get("file", ""),
+            status.get("catalog_version", "unknown"), item.get("last_verified", ""),
+            item.get("age_days", 0), item.get("status", "unknown"),
+            item.get("evidence_level", ""), item.get("source", ""),
+            ", ".join(item.get("used_by", [])),
+        ]
+        for col, value in enumerate(values, 1):
+            ws.cell(row=row, column=col).value = value
+        state = item.get("status", "unknown")
+        ws.cell(row=row, column=6).fill = PatternFill(
+            "solid", fgColor=fills.get(state, "E7E6E6")
+        )
+        ws.cell(row=row, column=6).font = Font(bold=True)
+
+    _col_widths(ws, [28, 30, 14, 16, 12, 14, 22, 55, 40])
+
 
 def _write_overview_sheet(wb, scan_data: dict):
     from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
@@ -1848,6 +1899,7 @@ def _write_health_sheet(wb, scan_data: dict):
 
 
 def _write_deprecated_sheet(wb, scan_data: dict):
+    from openpyxl.comments import Comment
     from openpyxl.styles import PatternFill
 
     ws = wb.create_sheet("DeprecatedResources")
@@ -1859,6 +1911,11 @@ def _write_deprecated_sheet(wb, scan_data: dict):
     for col, h in enumerate(headers, 1):
         ws.cell(row=1, column=col).value = h
     _header_style(ws, 1, len(headers))
+    ws["A1"].comment = Comment(
+        "Uses the local deprecated_types catalog. See CatalogStatus for version, "
+        "verification date, and freshness. No online validation occurs during the scan.",
+        "ATI",
+    )
     _auto_filter(ws, 1, len(headers))
     _freeze(ws, 2)
 
@@ -1879,6 +1936,8 @@ def _write_deprecated_sheet(wb, scan_data: dict):
 
 
 def _write_misconfig_sheet(wb, scan_data: dict):
+    from openpyxl.comments import Comment
+
     ws = wb.create_sheet("MisconfigFindings")
     headers = [
         "Rule ID", "Title", "Severity", "WAF Pillar",
@@ -1890,6 +1949,12 @@ def _write_misconfig_sheet(wb, scan_data: dict):
     for col, h in enumerate(headers, 1):
         ws.cell(row=1, column=col).value = h
     _header_style(ws, 1, len(headers))
+    ws["A1"].comment = Comment(
+        "Uses local ATI heuristic rules and resource enrichment. See CatalogStatus "
+        "for provenance and freshness. Azure Policy and Defender remain authoritative "
+        "API sources.",
+        "ATI",
+    )
     _auto_filter(ws, 1, len(headers))
     _freeze(ws, 2)
 

@@ -3,7 +3,7 @@ Core Azure Resource Graph query engine.
 
 Handles:
   - Paginated queries (1000 records/page, skip_token based)
-  - Throttle-aware retry (reads x-ms-user-quota-remaining)
+    - Bounded throttle retry (honors Retry-After with a safe fallback and cap)
   - Graceful degradation on 403 / authorization errors
   - Dynamic resource type discovery
 
@@ -12,7 +12,10 @@ API Reference:
 """
 
 import logging
+import math
 import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -23,6 +26,40 @@ PAGE_SIZE = 1000
 # Transient AzureCliCredential subprocess failure handling
 CLI_MAX_RETRIES = 3
 CLI_BACKOFF_BASE = 2.0  # seconds; exponential: 2s, 4s, 8s
+
+# Resource Graph throttling policy (per page)
+MAX_429_RETRIES = 5
+DEFAULT_429_RETRY_DELAY = 30
+MAX_429_RETRY_DELAY = 120
+
+
+def _retry_after_seconds(
+    error: Exception,
+    now: Optional[datetime] = None,
+) -> int:
+    """Return a bounded Retry-After delay from an Azure SDK HTTP error."""
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None) or {}
+    retry_after = headers.get("Retry-After") or headers.get("retry-after")
+
+    delay: Optional[float] = None
+    if retry_after is not None:
+        try:
+            delay = float(retry_after)
+        except (TypeError, ValueError):
+            try:
+                retry_at = parsedate_to_datetime(str(retry_after))
+                if retry_at.tzinfo is None:
+                    retry_at = retry_at.replace(tzinfo=timezone.utc)
+                current_time = now or datetime.now(timezone.utc)
+                delay = (retry_at - current_time).total_seconds()
+            except (TypeError, ValueError, OverflowError):
+                delay = None
+
+    if delay is None or delay < 0:
+        delay = DEFAULT_429_RETRY_DELAY
+
+    return min(math.ceil(delay), MAX_429_RETRY_DELAY)
 
 
 def query_resource_graph(
@@ -76,6 +113,7 @@ def query_resource_graph(
         skip_token: Optional[str] = None
         page = 0
         cli_retries = 0  # transient AzureCliCredential subprocess failures
+        rate_limit_retries = 0
 
         while True:
             page += 1
@@ -102,9 +140,23 @@ def query_resource_graph(
                 resp = client.resources(req)
             except Exception as e:
                 error_msg = str(e)
-                if "429" in error_msg or "TooManyRequests" in error_msg:
-                    log.warning("Rate limited by Resource Graph. Waiting 30 seconds...")
-                    time.sleep(30)
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+                if status_code == 429 or "429" in error_msg or "TooManyRequests" in error_msg:
+                    if rate_limit_retries >= MAX_429_RETRIES:
+                        log.warning(
+                            f"Resource Graph rate-limit retries exhausted for page {page} "
+                            f"after {MAX_429_RETRIES} retries. Returning {len(all_results)} "
+                            "record(s) collected so far; results may be incomplete."
+                        )
+                        break
+                    rate_limit_retries += 1
+                    delay = _retry_after_seconds(e)
+                    log.warning(
+                        f"Rate limited by Resource Graph (retry {rate_limit_retries}/"
+                        f"{MAX_429_RETRIES} for page {page}). Waiting {delay} seconds..."
+                    )
+                    time.sleep(delay)
+                    page -= 1  # retry the same page
                     continue
                 elif "403" in error_msg or "AuthorizationFailed" in error_msg:
                     log.warning(f"Authorization error — skipping query: {error_msg[:200]}")
@@ -129,6 +181,7 @@ def query_resource_graph(
                     break
 
             cli_retries = 0  # reset after a successful page
+            rate_limit_retries = 0  # retry budget is independent for each page
             data = resp.data or []
             all_results.extend(data)
 

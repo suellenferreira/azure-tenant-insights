@@ -746,6 +746,10 @@ Internal zone configuration may not be fully visible from Azure Resource Graph.
 
 ## Configuration & Mapping Files
 
+These files are static, version-controlled catalogs evaluated locally. ATI does not scrape Microsoft Learn, call GitHub, or update catalog contents during a customer scan. `config/catalog_metadata.json` is the manifest of record for catalog version, `last_verified`, evidence level, source, and affected outputs.
+
+Freshness is derived from the local date on every scan: `current` (0–90 days), `review_due` (91–180), and `stale` (>180). `review_due` and `stale` explicitly alert the administrator to validate the installed version. Status is visible in logs/data-collection warnings, contextual HTML indicators, the Technical HTML **Catalog Status** section, Excel `CatalogStatus`, and draw.io Overview. Executive HTML only receives a disclaimer when at least one catalog is `stale`; catalog age never blocks a scan or updates files automatically.
+
 ### `config/resource_enrichment.yaml`
 - Defines per-type property promotion rules
 - Used by `writers/excel_writer.py` for column enrichment
@@ -757,9 +761,18 @@ Internal zone configuration may not be fully visible from Azure Resource Graph.
 - Used by `processors/deprecation.py` for resource matching
 
 ### `config/misconfiguration_rules.yaml`
-- Security/configuration validation rules
+- Local heuristic security/configuration validation rules
 - Each rule references official Microsoft documentation
 - Used by `processors/misconfig_detector.py`
+
+### `config/drawio_stencils.yaml`
+- Local resource-type to bundled draw.io Azure stencil mapping
+- Uses a generic fallback for unmapped types
+- Version and freshness are disclosed on the diagram Overview and in Catalog Status
+
+### Catalog maintenance boundary
+
+The official repository uses `.github/workflows/catalog-maintenance.yml` to generate a monthly review-only PR covering schemas, URLs, and freshness. The job is guarded by the canonical repository name and does not edit catalog rules automatically. Customer installations do not run this maintenance job. Customers adopt a newer catalog through a reviewed release, controlled `git pull`, or fresh clone, then validate it before use. This separation keeps scans reproducible and independent of external repository availability.
 
 ---
 

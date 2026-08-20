@@ -551,6 +551,10 @@ azure-tenant-insights/
 
 ## Archivos de Configuración
 
+Los archivos de `config/` son catálogos locales versionados. ATI los evalúa durante el escaneo, pero no consulta, valida ni actualiza sus reglas desde Microsoft Learn o GitHub en runtime. `config/catalog_metadata.json` registra la versión, fecha de verificación, procedencia y secciones afectadas.
+
+La vigencia se calcula localmente en cada escaneo: `current` hasta 90 días, `review_due` de 91 a 180 días y `stale` después de 180 días. En `review_due` o `stale`, se alerta al administrador para validar la versión instalada. El HTML Técnico muestra indicadores contextuales y la tabla **Catalog Status**; Excel incluye la hoja `CatalogStatus`; draw.io registra la versión en Overview. Solo los catálogos `stale` generan aviso en el HTML Ejecutivo. Los avisos no bloquean el escaneo ni modifican los catálogos automáticamente.
+
 ### `config/resource_enrichment.yaml`
 
 Define qué campos anidados de `properties.*` deben promoverse a columnas con nombre por tipo de recurso. Los recursos sin entrada de regla aún se recopilan — el JSON crudo de `properties` se almacena en la hoja `AllResources`.
@@ -561,7 +565,11 @@ Contiene anuncios de retiro conocidos de Azure. Actualice este archivo cuando se
 
 ### `config/misconfiguration_rules.yaml`
 
-Define verificaciones de configuración para tipos de recurso específicos. Todas las reglas hacen referencia a documentación oficial de Microsoft.
+Define verificaciones heurísticas locales para tipos de recurso específicos. Las reglas se basan en documentación Microsoft vinculada, pero no se revalidan online durante el escaneo. Azure Policy y Defender siguen siendo fuentes oficiales mediante API.
+
+### Actualización de catálogos
+
+Adopte catálogos actualizados mediante una release revisada de ATI, `git pull` controlado o un nuevo clone. Valide el cambio antes de usarlo con clientes. El repositorio oficial ejecuta `.github/workflows/catalog-maintenance.yml` mensualmente para generar un PR solo de revisión. El job está restringido a `suellenferreira/azure-tenant-insights`; los clones y escaneos del cliente permanecen offline y fijados a la versión local.
 
 ---
 
@@ -590,7 +598,7 @@ Define verificaciones de configuración para tipos de recurso específicos. Toda
 ## Limitaciones
 
 - **Límite de página del Resource Graph:** 1.000 registros/página. La paginación se gestiona automáticamente.
-- **Rate limiting:** El Resource Graph limita las consultas por usuario. Use `--throttle-delay` para ajustar.
+- **Rate limiting:** Resource Graph limita las consultas por usuario. ATI respeta `Retry-After` en respuestas `429`, usa 30 segundos cuando el header no está disponible, limita cada espera a 120 segundos y reintenta cada página hasta cinco veces. Las páginas completadas se conservan si se agotan los intentos. Use `--throttle-delay` para reducir preventivamente la frecuencia de las consultas.
 - **No todas las propiedades expuestas:** El Resource Graph usa la API no-preview más reciente por tipo. Algunas propiedades solo disponibles en preview pueden no aparecer.
 - **Datos de costos requieren RBAC elevado:** Se necesita `Cost Management Reader`.
 - **Las estimaciones de costo de Defender son aproximadas:** Los precios unitarios se obtienen en vivo de la Azure Retail Prices API pública (precios de **lista**). Cuando la API no está disponible, se usan los precios de fallback integrados y los informes los etiquetan como fallback offline posiblemente desactualizado. Descuentos EA/MCA/CSP, niveles gratuitos y planes basados en uso (ej.: Cosmos DB) no se reflejan.
@@ -609,7 +617,7 @@ Define verificaciones de configuración para tipos de recurso específicos. Toda
 |---|---|---|
 | `Authentication failed` / no se encuentran suscripciones | Sin sesión, o tenant incorrecto | Ejecute `az login` (o `az login --tenant <ID>`); confirme con `az account show` |
 | `AuthorizationFailed` / `403` en el log para algunos datos | Falta de RBAC en una suscripción | Garantice al menos `Reader`; añada `Security Reader` (Defender) / `Cost Management Reader` (costos), o use `--skip-defender` / `--skip-costs` |
-| Escaneo lento o log `429 TooManyRequests` | Throttling del Resource Graph | Aumente `--throttle-delay` (ej.: `2.0`); reduzca el alcance con `--subscription-id` o `--management-group` |
+| Escaneo lento o log `429 TooManyRequests` | Throttling de Resource Graph | ATI reintenta cada página hasta cinco veces usando `Retry-After` (fallback de 30 segundos y límite de 120 segundos). Aumente `--throttle-delay` (ej.: `2.0`) o reduzca el alcance si el throttling persiste. |
 | Ejecución prolongada | El alcance por defecto son **todas** las suscripciones del tenant | Reduzca el alcance, o pase `-y` para omitir la confirmación |
 | Se cuelga en el prompt "Custom Report Name" en CI | Sin terminal interactivo (TTY) | Pase `--report-name <NOMBRE>` o `-y` (ambos omiten el prompt) |
 | Los gráficos no se muestran | Sin conexión / CDN bloqueada | Las tablas funcionan sin conexión; los gráficos necesitan `cdn.jsdelivr.net` |

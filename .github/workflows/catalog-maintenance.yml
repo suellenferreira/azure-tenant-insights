@@ -1,0 +1,35 @@
+name: Monthly catalog maintenance review
+
+on:
+  schedule:
+    - cron: "17 8 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  review:
+    if: github.repository == 'suellenferreira/azure-tenant-insights'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python scripts/catalog_maintenance.py docs/catalog-maintenance-report.md
+      - name: Open review pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: automation/catalog-review-${{ github.run_id }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add docs/catalog-maintenance-report.md
+          git commit -m "chore: monthly catalog maintenance review"
+          git push --set-upstream origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" --title "Monthly catalog maintenance review" --body "Review catalog freshness, source URLs, and validation findings. This PR does not update catalog rules automatically."

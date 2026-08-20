@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Local catalog governance and provenance**
+- Added `config/catalog_metadata.json` with catalog version, verification dates, evidence levels, sources, and affected outputs.
+- Catalog freshness is evaluated locally as `current`, `review_due`, or `stale`; customer scans never fetch or update catalog rules online.
+- Technical HTML now includes contextual catalog indicators and a central Catalog Status section; stale catalogs add a concise Executive disclaimer.
+- Excel now includes a `CatalogStatus` sheet and provenance comments on deprecated/misconfiguration findings; draw.io Overview records catalog version/status.
+- Added tests for freshness thresholds, warning generation, HTML disclosure, and Excel provenance.
+
+**Bounded Azure Resource Graph throttling retries**
+- `429 TooManyRequests` responses now honor `Retry-After`, with a 30-second fallback and a 120-second per-attempt cap.
+- Each Resource Graph page is retried at most five times; completed pages are preserved and explicitly reported as potentially incomplete if retries are exhausted.
+- Management Group subscription discovery now uses the shared paginated Resource Graph engine and the same retry policy.
+- Added standard-library unit coverage for retry delays, HTTP-date parsing, retry exhaustion, and partial-result preservation.
+
 **Executive/Technical Report and Excel Refinements**
 - Executive HTML now includes a factual **Executive Evidence Summary**, a separate WAF Pillar Profile, Defender plan posture KPIs, and the renamed **High/Critical Security Signals** KPI with explanatory tooltip.
 - Technical HTML top KPI cards now include subscriptions, High/Critical Security Signals, Defender Plans Observed, Disabled Defender Plans, and Non-Compliant Policy Records.

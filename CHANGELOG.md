@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**French documentation**
+- Added a complete `README.fr.md` translation preserving commands, links, output guidance, disclaimers, limitations, catalog governance, and draw.io viewing instructions.
+- Added reciprocal language navigation and documented the French guide in `DOCUMENTATION_INDEX.md`.
+
 **Local catalog governance and provenance**
 - Added `config/catalog_metadata.json` with catalog version, verification dates, evidence levels, sources, and affected outputs.
 - Catalog freshness is evaluated locally as `current`, `review_due`, or `stale`; customer scans never fetch or update catalog rules online.

@@ -6,6 +6,8 @@
 [![Azure Resource Graph](https://img.shields.io/badge/Azure-Resource%20Graph-0078D4)](https://learn.microsoft.com/pt-br/azure/governance/resource-graph/)
 [![Licença: MIT](https://img.shields.io/badge/Licença-MIT-green)](./LICENSE)
 
+**Idiomas:** [English](README.md) · [Français](README.fr.md) · Português (Brasil) · [Español](README.es.md)
+
 ---
 
 ## Índice
@@ -292,7 +294,7 @@ O ATI é executado com identidade, permissões Azure e escopo selecionados e con
 
 Os resultados representam um ponto no tempo e podem estar incompletos devido a permissões, disponibilidade das APIs, throttling ou coletores excluídos. Algumas observações são heurísticas ou baseadas em catálogos locais versionados e exigem validação antes de decisões de remediação, investimento, compliance ou arquitetura.
 
-Em atividades com clientes, alinhe antes da execução o escopo, a identidade somente leitura controlada pelo cliente, o destino dos outputs e o tratamento dos artefatos. Utilize os processos jurídicos, de privacidade, segurança e compliance da organização quando aprovação formal for necessária.
+Você pode executar o ATI de forma independente: defina o escopo do assessment, forneça e controle a identidade somente leitura usada na execução, escolha onde os outputs serão armazenados e decida como os artefatos gerados serão acessados, retidos e compartilhados. Siga os processos jurídicos, de privacidade, segurança e compliance da sua organização quando aprovação formal for necessária.
 
 ---
 
@@ -487,7 +489,17 @@ Arquivo HTML autocontido com navegação lateral.
 
 ### `*_Diagram.drawio` — Diagrama de Arquitetura
 
-Arquivo [draw.io](https://app.diagrams.net) multi-página (XML não comprimido) com ícones Azure reais. Abra no app web/desktop do draw.io ou na extensão do VS Code. Páginas:
+Arquivo [draw.io](https://app.diagrams.net) multi-página (XML não comprimido) com ícones Azure reais. O arquivo `.drawio` contém um diagrama editável, não uma imagem, e o GitHub não o renderiza diretamente.
+
+**Como abrir o diagrama gerado:**
+
+1. **diagrams.net Web:** acesse [app.diagrams.net](https://app.diagrams.net), selecione **Device** e depois **File > Open From > Device** para escolher o arquivo `.drawio` gerado.
+2. **diagrams.net Desktop:** instale o [aplicativo desktop](https://github.com/jgraph/drawio-desktop/releases) e abra o arquivo localmente.
+3. **VS Code:** instale uma extensão de integração Draw.io aprovada pelo cliente e abra o arquivo `.drawio` no editor.
+
+O diagrama pode conter metadados sensíveis do ambiente Azure. Use ferramentas aprovadas pelo cliente e siga a política aplicável de tratamento de dados, principalmente antes de usar a opção web.
+
+Páginas:
 
 - **Overview** — KPIs por Service Model e Business Pillar, com links clicáveis para todas as páginas
 - **Organization** — árvore Tenant → Management Groups → Subscriptions com contagem de recursos por assinatura
@@ -510,6 +522,7 @@ azure-tenant-insights/
 ├── requirements.txt
 ├── pyproject.toml
 ├── README.md                       ← Inglês (principal)
+├── README.fr.md                    ← Francês
 ├── README.pt-BR.md                 ← Este arquivo (Português BR)
 ├── README.es.md                    ← Espanhol
 ├── CHANGELOG.md
@@ -630,6 +643,7 @@ Adote catálogos atualizados por release revisada do ATI, `git pull` controlado 
 | Execução demorada | O escopo padrão é **todas** as subscriptions do tenant | Reduza o escopo, ou passe `-y` para pular a confirmação |
 | Trava no prompt "Custom Report Name" em CI | Sem terminal interativo (TTY) | Passe `--report-name <NOME>` ou `-y` (ambos pulam o prompt) |
 | Gráficos não renderizam | Offline / CDN bloqueada | As tabelas funcionam offline; os gráficos precisam de `cdn.jsdelivr.net` |
+| Arquivo `.drawio` não abre ou aparece como XML/texto | Nenhum visualizador compatível com diagrams.net foi selecionado | Abra [app.diagrams.net](https://app.diagrams.net), selecione **Device** e depois **File > Open From > Device**; alternativamente, use diagrams.net Desktop ou uma extensão aprovada do VS Code. |
 | Logs HTTP muito verbosos | `--debug` habilitado | Omita `--debug`; o SDK do Azure oculta tokens como `REDACTED` |
 
 > **Autenticação via Service Principal** lê `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` do **ambiente**. Exporte essas variáveis (ou simplesmente use `az login`) — um arquivo `.env` não é carregado automaticamente.

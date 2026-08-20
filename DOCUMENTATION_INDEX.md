@@ -43,6 +43,7 @@ Start here → **[README.UPDATES.md](./README.UPDATES.md)**
 - Exact changes needed in README.md
 - Portuguese (PT-BR) translation guide
 - Spanish (ES) translation guide
+- French (`README.fr.md`) user guide
 - Verification checklist
 - Timeline for production release
 
@@ -53,6 +54,9 @@ Start here → **[README.UPDATES.md](./README.UPDATES.md)**
 | Document | Purpose | Length | Read Time |
 |----------|---------|--------|-----------|
 | [README.md](./README.md) | Purpose, use cases, quick start, outputs, and limitations | User guide | 5-10 min |
+| [README.fr.md](./README.fr.md) | Guide utilisateur complet en français | User guide (French) | 5-10 min |
+| [README.pt-BR.md](./README.pt-BR.md) | Guia completo do usuário em português do Brasil | User guide (PT-BR) | 5-10 min |
+| [README.es.md](./README.es.md) | Guía completa del usuario en español | User guide (Spanish) | 5-10 min |
 | [DOCUMENTATION.md](./DOCUMENTATION.md) | Feature methodologies, data sources, and interpretation boundaries | Technical reference | 20 min |
 | [CHANGELOG.md](./CHANGELOG.md) | Release history and notable changes | Historical reference | As needed |
 | [TESTING_GUIDE.md](./TESTING_GUIDE.md) | Integration testing procedures | 4,500 words | 30 min (+ testing) |
@@ -247,6 +251,7 @@ an initial customer assessment.
 ### Before Release
 - [ ] Integration testing passes (all 7 items)
 - [ ] README.md updated with new features
+- [ ] README.fr.md translated
 - [ ] README.pt-BR.md translated
 - [ ] README.es.md translated
 - [ ] CHANGELOG.md updated in main repository

@@ -6,6 +6,8 @@
 [![Azure Resource Graph](https://img.shields.io/badge/Azure-Resource%20Graph-0078D4)](https://learn.microsoft.com/en-us/azure/governance/resource-graph/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](./LICENSE)
 
+**Languages:** English · [Français](README.fr.md) · [Português (Brasil)](README.pt-BR.md) · [Español](README.es.md)
+
 ---
 
 ## Table of Contents
@@ -304,7 +306,7 @@ ATI runs with an identity, Azure permissions, and assessment scope selected and 
 
 Results are point-in-time and may be incomplete because of permissions, API availability, throttling, or excluded collectors. Some observations are heuristic or based on versioned local catalogs and require validation before remediation, investment, compliance, or architectural decisions.
 
-For customer engagements, agree on the scope, customer-controlled read-only identity, output destination, and handling of generated artifacts before execution. Use the appropriate organizational legal, privacy, security, and compliance process when formal approval is required.
+You can run ATI independently: you define the assessment scope, provide and control the read-only identity used for execution, choose where outputs are stored, and decide how generated artifacts are accessed, retained, and shared. Follow your organization’s legal, privacy, security, and compliance processes whenever formal approval is required.
 
 ---
 
@@ -505,7 +507,17 @@ Self-contained HTML file with sidebar navigation.
 
 ### `*_Diagram.drawio` — Architecture Diagram
 
-A multi-page [draw.io](https://app.diagrams.net) file (uncompressed XML) with real Azure icons. Open it in the draw.io web/desktop app or the VS Code draw.io extension. Pages:
+A multi-page [draw.io](https://app.diagrams.net) file (uncompressed XML) with real Azure icons. The `.drawio` file is editable diagram content, not an image, and GitHub does not render it directly.
+
+**How to open the generated diagram:**
+
+1. **diagrams.net Web:** go to [app.diagrams.net](https://app.diagrams.net), select **Device**, then choose **File > Open From > Device** and select the generated `.drawio` file.
+2. **diagrams.net Desktop:** install the [desktop application](https://github.com/jgraph/drawio-desktop/releases) and open the file locally.
+3. **VS Code:** install a customer-approved Draw.io integration extension and open the `.drawio` file in the editor.
+
+The diagram may contain sensitive Azure environment metadata. Use customer-approved tooling and follow the applicable data-handling policy, especially before using the web option.
+
+Pages:
 
 - **Overview** — KPIs by Service Model and Business Pillar, with clickable links to every page
 - **Organization** — Tenant → Management Groups → Subscriptions tree with per-subscription resource counts
@@ -528,6 +540,7 @@ azure-tenant-insights/
 ├── requirements.txt
 ├── pyproject.toml
 ├── README.md                       ← This file (EN)
+├── README.fr.md                    ← French
 ├── README.pt-BR.md                 ← Portuguese (BR)
 ├── README.es.md                    ← Spanish
 ├── CHANGELOG.md
@@ -662,6 +675,7 @@ For large tenants, consider using `--skip-advisor`, `--skip-policy`, or `--no-ht
 | Runs for a long time | Default scope is **all** subscriptions in the tenant | Scope the scan, or pass `-y` to skip the confirmation |
 | Hangs on the "Custom Report Name" prompt in CI | No interactive terminal (TTY) | Pass `--report-name <NAME>` or `-y` (both skip the prompt) |
 | Charts don't render | Offline / CDN blocked | Data tables still work offline; charts need `cdn.jsdelivr.net` |
+| `.drawio` file does not open or displays as XML/text | No diagrams.net-compatible viewer is selected | Open [app.diagrams.net](https://app.diagrams.net), select **Device**, then **File > Open From > Device**; alternatively use diagrams.net Desktop or an approved VS Code extension. |
 | Very verbose HTTP logs | `--debug` enabled | Omit `--debug`; the Azure SDK redacts tokens as `REDACTED` |
 
 > **Service Principal auth** reads `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` from the **environment**. Export them (or simply use `az login`) — a `.env` file is not auto-loaded.

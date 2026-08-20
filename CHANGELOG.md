@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Excel now includes a `CatalogStatus` sheet and provenance comments on deprecated/misconfiguration findings; draw.io Overview records catalog version/status.
 - Added tests for freshness thresholds, warning generation, HTML disclosure, and Excel provenance.
 
+**Customer data handling disclosure**
+- Added a consolidated customer-facing disclaimer to multilingual READMEs and detailed documentation.
+- Clarified that ATI uses customer-controlled identity/scope and writes reports only to the selected local directory or storage destination.
+- Added concise sensitivity and output-location guidance to Executive and Technical report footers.
+
 **Bounded Azure Resource Graph throttling retries**
 - `429 TooManyRequests` responses now honor `Retry-After`, with a 30-second fallback and a 120-second per-attempt cap.
 - Each Resource Graph page is retried at most five times; completed pages are preserved and explicitly reported as potentially incomplete if retries are exhausted.

@@ -284,6 +284,18 @@ Os arquivos de saída são salvos em `./AzureTenantInsights/` por padrão.
 
 ---
 
+## Tratamento de Dados do Cliente e Aviso de Uso
+
+O ATI é um acelerador open source de assessment somente leitura. Não é um produto oficial Microsoft, certificação de conformidade ou substituto para revisão formal de arquitetura, segurança, finanças, regulamentação ou aspectos jurídicos. O ATI não modifica recursos Azure nem executa remediação automática.
+
+O ATI é executado com identidade, permissões Azure e escopo selecionados e controlados pelo cliente. Os relatórios Excel, HTML e draw.io são gravados somente no diretório local de saída ou destino de armazenamento escolhido para a execução. O ATI não envia nem transfere o conteúdo dos relatórios gerados para outro local. Como os outputs podem conter metadados sensíveis do ambiente Azure, o cliente deve aprovar armazenamento, acesso, retenção e distribuição conforme suas políticas aplicáveis.
+
+Os resultados representam um ponto no tempo e podem estar incompletos devido a permissões, disponibilidade das APIs, throttling ou coletores excluídos. Algumas observações são heurísticas ou baseadas em catálogos locais versionados e exigem validação antes de decisões de remediação, investimento, compliance ou arquitetura.
+
+Em atividades com clientes, alinhe antes da execução o escopo, a identidade somente leitura controlada pelo cliente, o destino dos outputs e o tratamento dos artefatos. Utilize os processos jurídicos, de privacidade, segurança e compliance da organização quando aprovação formal for necessária.
+
+---
+
 ## Uso
 
 ### Exemplos Básicos

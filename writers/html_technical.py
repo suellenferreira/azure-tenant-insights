@@ -2250,7 +2250,7 @@ summary.mod-h3:hover{{color:#2E86AB}}
 </div>
 <div class="footer">
   Azure Tenant Insights v1.0.0 &mdash; Technical Report &mdash; {scan_date}<br>
-  <small>Data sourced from Azure Resource Graph, Azure Advisor, Azure Policy Insights, and Resource Health APIs. Point-in-time assessment only.</small>
+    <small>Data sourced from Azure Resource Graph, Azure Advisor, Azure Policy Insights, and Resource Health APIs. Generated reports remain in the output destination selected for this execution; ATI does not upload or transfer report contents elsewhere. Treat outputs as sensitive operational artifacts. Point-in-time assessment only.</small>
   {warnings_html}
   <div style="margin-top:.8rem;border-top:1px solid #ddd;padding-top:.8rem">
     <p style="font-size:.7rem;color:#bbb;margin-bottom:.3rem"><strong>Microsoft Documentation References</strong></p>

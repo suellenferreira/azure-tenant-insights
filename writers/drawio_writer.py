@@ -400,7 +400,8 @@ def _page_overview(scan_data: dict, pages: List[Tuple[str, str]]) -> _Page:
         f"Tenant: {meta.get('tenant_name', 'N/A')}   ·   "
         f"Scan: {str(meta.get('scan_timestamp', ''))[:10]}   ·   "
         f"Subscriptions: {meta.get('subscription_count', 0)}   ·   "
-        f"Resources: {sum(len(v) for v in scan_data.get('resources_by_type', {}).values()):,}",
+        f"Resources: {sum(len(v) for v in scan_data.get('resources_by_type', {}).values()):,}   ·   "
+        f"Catalog: {meta.get('catalog_version', 'unknown')} ({meta.get('catalog_status', 'unknown')})",
         _META_STYLE, PAGE_MARGIN, PAGE_MARGIN + 52, 1300, 28)
 
     sm = _counts_by(scan_data, "service_model")

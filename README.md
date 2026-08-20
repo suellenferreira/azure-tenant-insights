@@ -565,6 +565,10 @@ azure-tenant-insights/
 
 ## Configuration Files
 
+Files under `config/` are version-controlled local catalogs. ATI evaluates them during the scan but does not fetch, validate, or update their rules from Microsoft Learn or GitHub at runtime. `config/catalog_metadata.json` records the catalog version, verification date, provenance, and affected report sections.
+
+Catalog freshness is calculated locally on every scan: `current` through 90 days, `review_due` from 91 through 180 days, and `stale` after 180 days. At `review_due` or `stale`, the administrator is alerted to validate the installed catalog version. The Technical HTML shows contextual indicators and a central **Catalog Status** table; Excel includes a `CatalogStatus` sheet; draw.io records the catalog version on its Overview page. Only `stale` catalogs produce an Executive HTML disclaimer. Warnings do not block scans or modify local catalogs automatically.
+
 ### `config/resource_enrichment.yaml`
 
 Defines which nested `properties.*` fields to promote to named columns per resource type. Resources without a rule entry are still collected — their raw `properties` JSON is stored in the `AllResources` sheet.
@@ -590,7 +594,11 @@ Update this file when new retirement announcements are published at [Azure Updat
 
 ### `config/misconfiguration_rules.yaml`
 
-Defines configuration checks for specific resource types. All rules reference official Microsoft documentation. Supported operators: `equals`, `not_equals`, `equals_true`, `equals_false`, `is_null`, `is_not_null`, `contains`, `not_contains`.
+Defines local heuristic configuration checks for specific resource types. Rules are grounded in linked Microsoft documentation but are not revalidated online during a scan. Azure Policy and Defender findings remain authoritative API results. Supported operators: `equals`, `not_equals`, `equals_true`, `equals_false`, `is_null`, `is_not_null`, `contains`, `not_contains`.
+
+### Catalog updates
+
+Adopt updated catalogs through a reviewed ATI release, controlled `git pull`, or fresh clone. Validate the change before customer use. The official repository runs `.github/workflows/catalog-maintenance.yml` monthly to generate a review-only PR. Its job is restricted to `suellenferreira/azure-tenant-insights`; customer clones and scans remain offline and pinned to their local catalog version.
 
 ---
 
@@ -621,7 +629,7 @@ For large tenants, consider using `--skip-advisor`, `--skip-policy`, or `--no-ht
 ## Limitations
 
 - **Resource Graph page limit:** 1,000 records/page. Pagination is handled automatically.
-- **Rate limiting:** Resource Graph throttles queries per user. Use `--throttle-delay` to adjust.
+- **Rate limiting:** Resource Graph throttles queries per user. ATI honors `Retry-After` on `429`, falls back to 30 seconds when unavailable, caps each wait at 120 seconds, and retries each page up to five times. Completed pages are preserved if retries are exhausted. Use `--throttle-delay` to reduce request frequency proactively.
 - **Not all properties exposed:** Resource Graph uses the latest non-preview API per type. Some preview-only properties may not appear.
 - **Cost data requires elevated RBAC:** `Cost Management Reader` is needed, which is higher than `Reader`.
 - **Defender cost estimates are approximate:** Unit prices are fetched live from the public Azure Retail Prices API (public **list** pricing). When the API is unreachable, built-in fallback prices are used and the reports label them as a possibly-outdated offline fallback. EA/MCA/CSP discounts, free tiers, and usage-based plans (e.g. Cosmos DB) are not reflected.
@@ -637,7 +645,7 @@ For large tenants, consider using `--skip-advisor`, `--skip-policy`, or `--no-ht
 |---|---|---|
 | `Authentication failed` / no subscriptions found | Not logged in, or wrong tenant | Run `az login` (or `az login --tenant <ID>`); confirm with `az account show` |
 | `AuthorizationFailed` / `403` in the log for some data | Missing RBAC on a subscription | Ensure at least `Reader`; add `Security Reader` (Defender) / `Cost Management Reader` (costs), or use `--skip-defender` / `--skip-costs` |
-| Scan is slow or logs `429 TooManyRequests` | Resource Graph throttling | Increase `--throttle-delay` (e.g. `2.0`); narrow the scope with `--subscription-id` or `--management-group` |
+| Scan is slow or logs `429 TooManyRequests` | Resource Graph throttling | ATI retries each page up to five times using `Retry-After` (30-second fallback, 120-second cap). Increase `--throttle-delay` (e.g. `2.0`) or narrow the scope if throttling persists. |
 | Runs for a long time | Default scope is **all** subscriptions in the tenant | Scope the scan, or pass `-y` to skip the confirmation |
 | Hangs on the "Custom Report Name" prompt in CI | No interactive terminal (TTY) | Pass `--report-name <NAME>` or `-y` (both skip the prompt) |
 | Charts don't render | Offline / CDN blocked | Data tables still work offline; charts need `cdn.jsdelivr.net` |

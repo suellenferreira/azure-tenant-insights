@@ -1,0 +1,15 @@
+{
+  "catalog_version": "2026.08",
+  "review_due_days": 90,
+  "stale_days": 180,
+  "catalogs": [
+    {"id": "deprecated_types", "file": "deprecated_types.json", "display_name": "Deprecated types", "last_verified": "2026-06-01", "evidence_level": "official-announcement", "source": "https://azure.microsoft.com/en-us/updates/", "used_by": ["Deprecated Resources"]},
+    {"id": "misconfiguration_rules", "file": "misconfiguration_rules.yaml", "display_name": "Misconfiguration rules", "last_verified": "2026-08-19", "evidence_level": "local-heuristic", "source": "Per-rule Microsoft Learn URLs", "used_by": ["Misconfiguration Findings", "Zero Trust Posture"]},
+    {"id": "modernization_signals", "file": "modernization_signals.yaml", "display_name": "Modernization signals", "last_verified": "2026-08-19", "evidence_level": "local-inference", "source": "Microsoft Learn references in catalog", "used_by": ["Modernization Signals"]},
+    {"id": "resource_classification", "file": "resource_classification.yaml", "display_name": "Resource classification", "last_verified": "2026-08-19", "evidence_level": "local-taxonomy", "source": "Azure Resource Graph resource types", "used_by": ["Classification", "Technical Categories"]},
+    {"id": "resource_enrichment", "file": "resource_enrichment.yaml", "display_name": "Resource enrichment", "last_verified": "2026-08-19", "evidence_level": "local-projection", "source": "Azure Resource Graph and ARM schemas", "used_by": ["Resource Inventory", "Misconfiguration Findings"]},
+    {"id": "drawio_stencils", "file": "drawio_stencils.yaml", "display_name": "Draw.io stencils", "last_verified": "2026-08-19", "evidence_level": "visual-mapping", "source": "Bundled draw.io Azure 2019 stencils", "used_by": ["Architecture Diagram"]},
+    {"id": "network_placement", "file": "network_placement.yaml", "display_name": "Network placement", "last_verified": "2026-08-19", "evidence_level": "local-topology-rule", "source": "Azure resource relationship properties", "used_by": ["Network Detail"]},
+    {"id": "security_overlay", "file": "security_overlay.yaml", "display_name": "Security overlay", "last_verified": "2026-08-19", "evidence_level": "local-visual-rule", "source": "ATI findings and Microsoft Zero Trust guidance", "used_by": ["Security Posture Diagram"]}
+  ]
+}

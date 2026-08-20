@@ -491,6 +491,9 @@ def main() -> None:
         # Uninstall warning capture before processing phase
         logging.getLogger().removeHandler(_warn_handler)
         collection_warnings = _warn_handler.records
+        from processors.catalog_status import catalog_warnings, load_catalog_status
+        catalog_status = load_catalog_status()
+        collection_warnings.extend(catalog_warnings(catalog_status))
         logger.info("Processing and enriching data...")
         from processors.deprecation import detect_deprecated
         from processors.misconfig_detector import detect_misconfigurations
@@ -527,8 +530,11 @@ def main() -> None:
                 "total_resources": total_resources,
                 "cloud": args.cloud,
                 "report_name": report_prefix,
+                "catalog_version": catalog_status["catalog_version"],
+                "catalog_status": catalog_status["overall_status"],
             },
             "collection_warnings": collection_warnings,
+            "catalog_status": catalog_status,
             "subscriptions": subscriptions,
             "resources_by_type": resources_by_type,
             "management_groups": management_groups,

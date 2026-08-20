@@ -36,6 +36,19 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
     defender_data = scan_data.get("defender_data", [])
     defender_posture = scan_data.get("defender_posture", [])
     misconfig_findings = scan_data.get("misconfig_findings", [])
+    catalog_status = scan_data.get("catalog_status", {})
+    stale_catalogs = [
+        item.get("display_name", item.get("id", "catalog"))
+        for item in catalog_status.get("catalogs", [])
+        if item.get("status") == "stale"
+    ]
+    catalog_disclaimer_html = (
+        '<div class="alert-warn"><strong>Catalog review required:</strong> '
+        + ", ".join(stale_catalogs)
+        + ". These findings use local version-controlled catalogs that are not "
+        "revalidated online during the scan.</div>"
+        if stale_catalogs else ""
+    )
 
     scan_date = meta.get("scan_timestamp", "")[:10]
     tenant_id_raw = meta.get("tenant_id", "N/A")
@@ -153,6 +166,7 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
         defender_total=defender_total,
         defender_plan_counts=defender_plan_counts,
         warnings_html=warnings_html,
+        catalog_disclaimer_html=catalog_disclaimer_html,
     )
 
     with open(output_path, "w", encoding="utf-8") as f:
@@ -934,6 +948,7 @@ def _render_html(
     defender_high=0, defender_total=0,
     defender_plan_counts=None,
     warnings_html="",
+    catalog_disclaimer_html="",
 ) -> str:
     PRI_COLORS = {"Critical": "#C00000", "High": "#FF4444", "Medium": "#FFC000", "Low": "#70AD47"}
 
@@ -1063,6 +1078,7 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 .opp-meta a{{color:#2E86AB;text-decoration:none}}
 .mod-qw{{font-size:.82rem;color:#385723;background:#eef7e6;border-radius:8px;padding:.5rem .8rem;margin-top:.8rem}}
 .alert-critical{{background:#fde8e8;border-left:4px solid #C00000;color:#7b0000;padding:1rem 1.2rem;border-radius:8px;margin:.8rem 0}}
+.alert-warn{{background:#fff8e1;border-left:4px solid #FFC000;color:#6b5200;padding:1rem 1.2rem;border-radius:8px;margin:.8rem 0}}
 .no-data{{color:#888;font-style:italic;padding:.5rem 0}}
 .ctrl-bar{{display:flex;gap:.6rem;margin:0 0 1rem;padding:.5rem 0}}
 .ctrl-btn{{padding:.35rem 1rem;border:1.5px solid #2E86AB;background:#fff;color:#2E86AB;border-radius:20px;cursor:pointer;font-size:.82rem;font-weight:600;transition:all .2s}}
@@ -1131,6 +1147,7 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
 <div class="container">
   <div class="ctrl-bar"><button class="ctrl-btn" onclick="expandAll()">&#8862; Expand All</button><button class="ctrl-btn" onclick="collapseAll()">&#8863; Collapse All</button></div>
   {dep_alert}
+    {catalog_disclaimer_html}
   <div class="risk-banner">Overall Environment Risk Level: {risk_level}</div>
   <div style="text-align:center">{risk_tooltip_html}</div>
     {evidence_summary_html}

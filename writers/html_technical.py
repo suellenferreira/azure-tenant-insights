@@ -69,6 +69,19 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
     defender_posture = scan_data.get("defender_posture", [])
     waf_findings = scan_data.get("waf_findings", {})
     resources_by_type = scan_data.get("resources_by_type", {})
+    catalog_status = scan_data.get("catalog_status", {})
+    from writers.catalog_status import catalog_badge_html, catalog_status_html
+    misconfig_catalog_badge = catalog_badge_html(
+        catalog_status, ("misconfiguration_rules", "resource_enrichment")
+    )
+    deprecated_catalog_badge = catalog_badge_html(catalog_status, ("deprecated_types",))
+    modernization_catalog_badge = catalog_badge_html(
+        catalog_status, ("modernization_signals",)
+    )
+    classification_catalog_badge = catalog_badge_html(
+        catalog_status, ("resource_classification",)
+    )
+    catalogs_html = catalog_status_html(catalog_status)
 
     scan_date = meta.get("scan_timestamp", "")[:10]
     tenant_id_raw = meta.get("tenant_id", "N/A")
@@ -103,6 +116,9 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
     # Sections
     inventory_html = _inventory_section(summary)
     technical_categories_html = _build_technical_categories_section(resources_by_type)
+    technical_categories_html = technical_categories_html.replace(
+        "</h2>", f"{classification_catalog_badge}</h2>", 1
+    )
     waf_html = _waf_section(waf_findings)
     policy_summary_html = _policy_summary_section(policy_data)
     policy_html = _table_section(policy_data, [
@@ -205,6 +221,11 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
         advisor_count=len(advisor_data),
         defender_plan_counts=defender_plan_counts,
         warnings_html=warnings_html,
+        catalogs_html=catalogs_html,
+        misconfig_catalog_badge=misconfig_catalog_badge,
+        deprecated_catalog_badge=deprecated_catalog_badge,
+        modernization_catalog_badge=modernization_catalog_badge,
+        classification_catalog_badge=classification_catalog_badge,
     )
 
     with open(output_path, "w", encoding="utf-8") as f:
@@ -1914,6 +1935,11 @@ def _render_html(
     deprecated_count, advisor_count,
     defender_plan_counts=None,
     warnings_html="",
+    catalogs_html="",
+    misconfig_catalog_badge="",
+    deprecated_catalog_badge="",
+    modernization_catalog_badge="",
+    classification_catalog_badge="",
 ) -> str:
     kpi = summary
     defender_plan_counts = defender_plan_counts or {"observed": 0, "disabled": 0}
@@ -1989,6 +2015,8 @@ summary.mod-h3::before{{content:'\\25B6';font-size:.72rem;color:#2E86AB;transiti
 details[open]>summary.mod-h3::before{{transform:rotate(90deg)}}
 summary.mod-h3:hover{{color:#2E86AB}}
 .sm-info{{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border:1px solid #2E86AB;border-radius:50%;color:#2E86AB;font-size:.62rem;vertical-align:1px;cursor:help}}
+.catalog-badge{{display:inline-flex;align-items:center;justify-content:center;margin-left:.4rem;font-size:.85rem;cursor:help}}
+.catalog-review_due{{color:#9A6700}}.catalog-stale{{color:#C00000}}.catalog-current{{color:#777}}
 .sm-help{{font-size:.71rem;color:#777;margin:.25rem 0 -.1rem}}
 .sm-help summary{{cursor:pointer;color:#2E86AB;font-weight:600}}
 .sm-help p{{margin:.3rem 0 0;line-height:1.4}}
@@ -2075,6 +2103,7 @@ summary.mod-h3:hover{{color:#2E86AB}}
   <a href="#technical-categories">📊 Technical Categories</a>
   {arc_nav}
   <a href="#regions">🌍 Regional Distribution</a>
+    <a href="#catalog-status">Catalog Status</a>
   <h3>Modernization</h3>
   <a href="#modernization">🚀 Modernization Signals</a>
     <a href="#resiliency">🧭 Resiliency Posture</a>
@@ -2138,6 +2167,8 @@ summary.mod-h3:hover{{color:#2E86AB}}
 
     {technical_categories_html}
 
+    {catalogs_html}
+
     {arc_section}
 
     <div class="section" id="regions">
@@ -2156,6 +2187,7 @@ summary.mod-h3:hover{{color:#2E86AB}}
     <div class="section" id="modernization">
       <h2>🚀 Cloud Modernization Signals &amp; Opportunity
         <small style="font-size:.7rem;color:#888;font-weight:normal;margin-left:.5rem">(INFERRED — signals from inventory; evidence-backed, not prescriptive)</small>
+                {modernization_catalog_badge}
       </h2>
       <p class="note">Per-dimension maturity/adoption signals with the supporting resources and the scoring method used. Low-confidence rows indicate weak evidence — validate against your architecture.</p>
       {modernization_detail_html}
@@ -2185,8 +2217,8 @@ summary.mod-h3:hover{{color:#2E86AB}}
     </div>
 
     <div class="section" id="misconfig">
-      <h2>⚠ Known Misconfigurations <span class="cnt">{misconfig_count}</span></h2>
-      <p class="note">Configuration findings based exclusively on official Microsoft Azure best practices. All rules are linked to documentation.</p>
+            <h2>⚠ Known Misconfigurations <span><span class="cnt">{misconfig_count}</span>{misconfig_catalog_badge}</span></h2>
+            <p class="note">Local ATI heuristic rules grounded in linked Microsoft documentation. They are not revalidated online during the scan; Azure Policy and Defender findings remain authoritative API results.</p>
       {misconfig_html}
     </div>
 
@@ -2208,7 +2240,7 @@ summary.mod-h3:hover{{color:#2E86AB}}
     </div>
 
     <div class="section" id="deprecated">
-      <h2>⛔ Deprecated &amp; Retiring Resources <span class="cnt">{deprecated_count}</span></h2>
+            <h2>⛔ Deprecated &amp; Retiring Resources <span><span class="cnt">{deprecated_count}</span>{deprecated_catalog_badge}</span></h2>
       <p class="note">Resources matching known Azure retirement announcements. Migration paths link to official Microsoft documentation.</p>
       {deprecated_html}
     </div>

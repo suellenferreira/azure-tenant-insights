@@ -772,7 +772,9 @@ Freshness is derived from the local date on every scan: `current` (0–90 days),
 
 ### Catalog maintenance boundary
 
-The official repository uses `.github/workflows/catalog-maintenance.yml` to generate a monthly review-only PR covering schemas, URLs, and freshness. The job is guarded by the canonical repository name and does not edit catalog rules automatically. Customer installations do not run this maintenance job. Customers adopt a newer catalog through a reviewed release, controlled `git pull`, or fresh clone, then validate it before use. This separation keeps scans reproducible and independent of external repository availability.
+The official repository uses `.github/workflows/catalog-maintenance.yml` monthly to validate parseability, presence, freshness, hashes, and source URLs. Every run publishes an actionable report to the workflow summary; a PR is created only when findings require review and is assigned to the canonical repository owner. The report provides catalog-specific guidance, evidence, reviewer decisions, and a completion checklist. `.github/workflows/catalog-review-followup.yml` updates one reminder after 7 days, applies an overdue label after 14 days, creates an assigned tracking issue after 30 days, and closes that issue when the PR completes. Both jobs are guarded by the canonical repository name and never edit catalog rules automatically. Customer installations do not run these maintenance jobs.
+
+Automated PR creation requires the repository setting **Allow GitHub Actions to create and approve pull requests** under Actions workflow permissions.
 
 ---
 

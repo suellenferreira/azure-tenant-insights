@@ -594,7 +594,11 @@ Define verificaciones heurísticas locales para tipos de recurso específicos. L
 
 ### Actualización de catálogos
 
-Adopte catálogos actualizados mediante una release revisada de ATI, `git pull` controlado o un nuevo clone. Valide el cambio antes de usarlo con clientes. El repositorio oficial ejecuta `.github/workflows/catalog-maintenance.yml` mensualmente para generar un PR solo de revisión. El job está restringido a `suellenferreira/azure-tenant-insights`; los clones y escaneos del cliente permanecen offline y fijados a la versión local.
+Adopte catálogos actualizados mediante una release revisada de ATI, `git pull` controlado o un nuevo clone. Valide el cambio antes de usarlo con clientes. El repositorio oficial ejecuta `.github/workflows/catalog-maintenance.yml` mensualmente. El informe aparece en el resumen del workflow y solo se abre un PR cuando existen hallazgos accionables, como catálogos antiguos, archivos ausentes/inválidos o URLs que requieren revisión. El informe identifica catálogo, evidencia, acción esperada, opciones de decisión y checklist; nunca actualiza reglas automáticamente.
+
+El PR de revisión se asigna al propietario del repositorio canónico. `.github/workflows/catalog-review-followup.yml` verifica semanalmente los PR abiertos con `catalog-review`: actualiza un único comentario después de 7 días, añade `catalog-review-overdue` después de 14 días y crea una issue asignada después de 30 días. La issue se cierra al concluir el PR. Ambos jobs están restringidos a `suellenferreira/azure-tenant-insights`; los clones y escaneos del cliente permanecen offline y fijados a la versión local.
+
+El administrador del repositorio debe habilitar **Settings > Actions > General > Workflow permissions > Allow GitHub Actions to create and approve pull requests** para permitir la creación automática del PR de revisión.
 
 ---
 

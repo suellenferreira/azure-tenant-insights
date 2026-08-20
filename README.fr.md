@@ -600,7 +600,11 @@ Définit les contrôles heuristiques locaux de configuration pour des types de r
 
 ### Mises à jour des catalogues
 
-Adoptez les catalogues mis à jour par le biais d’une version ATI révisée, d’un `git pull` contrôlé ou d’un nouveau clone. Validez la modification avant toute utilisation chez un client. Le dépôt officiel exécute `.github/workflows/catalog-maintenance.yml` chaque mois afin de générer une PR destinée uniquement à la révision. Sa tâche est limitée à `suellenferreira/azure-tenant-insights` ; les clones et analyses des clients restent hors ligne et épinglés à la version locale de leur catalogue.
+Adoptez les catalogues mis à jour au moyen d’une version ATI révisée, d’un `git pull` contrôlé ou d’un nouveau clone. Validez la modification avant utilisation. Le dépôt officiel exécute `.github/workflows/catalog-maintenance.yml` chaque mois. Le rapport apparaît dans le résumé du workflow et une PR n’est ouverte que pour des éléments exploitables, tels que des catalogues anciens, des fichiers absents/invalides ou des URL à examiner. Le rapport précise le catalogue, les preuves, l’action attendue, les options de décision et la checklist ; il ne met jamais les règles à jour automatiquement.
+
+La PR de revue est attribuée au propriétaire du dépôt canonique. `.github/workflows/catalog-review-followup.yml` vérifie chaque semaine les PR ouvertes portant le label `catalog-review` : il met à jour un commentaire unique après 7 jours, ajoute `catalog-review-overdue` après 14 jours et crée une issue attribuée après 30 jours. L’issue est fermée lorsque la PR est terminée. Les deux jobs sont limités à `suellenferreira/azure-tenant-insights` ; les clones et analyses client restent hors ligne et épinglés à leur version locale.
+
+L’administrateur du dépôt doit activer **Settings > Actions > General > Workflow permissions > Allow GitHub Actions to create and approve pull requests** afin d’autoriser la création automatique de la PR de revue.
 
 ---
 

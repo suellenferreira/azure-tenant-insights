@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Actionable catalog review automation**
+- Monthly maintenance now opens a PR only for actionable findings and publishes catalog-specific evidence, guidance, reviewer decisions, and a completion checklist.
+- Added weekly PR follow-up with a 7-day reminder, 14-day overdue label, 30-day tracking issue, and automatic issue closure.
+
 **French documentation**
 - Added a complete `README.fr.md` translation preserving commands, links, output guidance, disclaimers, limitations, catalog governance, and draw.io viewing instructions.
 - Added reciprocal language navigation and documented the French guide in `DOCUMENTATION_INDEX.md`.

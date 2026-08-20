@@ -1,0 +1,101 @@
+name: Catalog review follow-up
+
+on:
+  schedule:
+    - cron: "23 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  follow-up:
+    if: github.repository == 'suellenferreira/azure-tenant-insights'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remind and escalate open catalog reviews
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const marker = '<!-- ati-catalog-review-reminder -->';
+            const now = Date.now();
+
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', per_page: 100
+            });
+            const catalogPulls = pulls.filter(pr =>
+              pr.labels.some(label => label.name === 'catalog-review')
+            );
+
+            for (const pr of catalogPulls) {
+              const ageDays = Math.floor((now - Date.parse(pr.created_at)) / 86400000);
+              if (ageDays < 7) continue;
+
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: pr.number, per_page: 100
+              });
+              const existing = comments.find(comment => comment.body?.includes(marker));
+              const body = `${marker}\nCatalog review reminder: this PR has been open for **${ageDays} days**. ` +
+                `Please complete the reviewer decision and checklist in the maintenance report. ` +
+                `This reminder is updated weekly rather than creating repeated comments.`;
+              if (existing) {
+                await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
+              } else {
+                await github.rest.issues.createComment({owner, repo, issue_number: pr.number, body});
+              }
+
+              if (ageDays >= 14) {
+                try {
+                  await github.rest.issues.getLabel({owner, repo, name: 'catalog-review-overdue'});
+                } catch {
+                  await github.rest.issues.createLabel({
+                    owner, repo, name: 'catalog-review-overdue', color: 'B60205',
+                    description: 'Catalog review has exceeded the expected review period'
+                  });
+                }
+                await github.rest.issues.addLabels({
+                  owner, repo, issue_number: pr.number, labels: ['catalog-review-overdue']
+                });
+              }
+
+              if (ageDays >= 30) {
+                const title = `Catalog review overdue: PR #${pr.number}`;
+                const issues = await github.paginate(github.rest.issues.listForRepo, {
+                  owner, repo, state: 'open', labels: 'catalog-review-tracking', per_page: 100
+                });
+                if (!issues.some(issue => issue.title === title)) {
+                  try {
+                    await github.rest.issues.getLabel({owner, repo, name: 'catalog-review-tracking'});
+                  } catch {
+                    await github.rest.issues.createLabel({
+                      owner, repo, name: 'catalog-review-tracking', color: '5319E7',
+                      description: 'Tracks an overdue catalog review PR'
+                    });
+                  }
+                  await github.rest.issues.create({
+                    owner, repo, title,
+                    body: `PR #${pr.number} has remained open for ${ageDays} days. Review the catalog evidence and record a decision.`,
+                    labels: ['catalog-review-tracking'],
+                    assignees: [owner]
+                  });
+                }
+              }
+            }
+
+            const trackingIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', labels: 'catalog-review-tracking', per_page: 100
+            });
+            for (const issue of trackingIssues) {
+              const match = issue.title.match(/PR #(\d+)$/);
+              if (!match) continue;
+              const prNumber = Number(match[1]);
+              if (!catalogPulls.some(pr => pr.number === prNumber)) {
+                await github.rest.issues.update({
+                  owner, repo, issue_number: issue.number, state: 'closed',
+                  state_reason: 'completed'
+                });
+              }
+            }

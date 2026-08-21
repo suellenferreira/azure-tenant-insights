@@ -13,6 +13,16 @@
 
 resource_types:
 
+  "microsoft.powerbidedicated/capacities":
+    display_name: "Capacities"
+    description: "Power BI Embedded / Power BI Dedicated capacity; distinct from Microsoft Fabric F-SKU capacities."
+    promoted_fields: []
+
+  "microsoft.fabric/capacities":
+    display_name: "Fabric Capacities"
+    description: "Microsoft Fabric F-SKU capacity."
+    promoted_fields: []
+
   "microsoft.compute/virtualmachines":
     display_name: "Virtual Machines"
     promoted_fields:

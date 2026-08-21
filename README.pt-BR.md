@@ -435,12 +435,12 @@ Os relatórios gerados podem incluir metadados do tenant, IDs de assinatura, nom
 | Aba | Conteúdo |
 |---|---|
 | `Overview` | Resumo de KPIs, principais tipos de recurso, Advisor por pilar WAF, **Resource Origin** (Azure nativo / Híbrido-Arc / Migrate), um resumo de **Service Model** (IaaS/PaaS/SaaS/Hybrid/Supporting) e **Data Collection Notes** |
-| `Index` | Aba de navegação (após `Overview`) com hyperlink para cada aba; cada aba possui um link **↩ Index** de retorno |
+| `Index` | Aba de navegação (após `Overview`) com Sheet, **Resource Type** ARM canônico, **Description**, **Resource Count** e hyperlink; abas sem tipo são identificadas como resumo do workbook |
 | `Classification` | **Taxonomia** de recursos por tipo — Categoria Técnica, Pilar de Negócio, Service Model, Publisher (Microsoft/Third-party) — com pivôs de resumo (config-driven) |
 | `ModernizationSignals` | *(INFERIDO)* Cloud Modernization & Opportunity — score por dimensão (0–100), nível, confiança, sinal inferido, evidências, indicador de oportunidade e referências de framework |
 | `Subscriptions` | Uma linha por assinatura com contagem de recursos |
 | `AllResources` | Tabela plana de TODOS os recursos em todos os tipos, com uma coluna **Category** (Azure nativo / Híbrido-Arc / Migrate), colunas **Business Pillar** e **Service Model** |
-| `[TipoRecurso]` | Uma aba por tipo de recurso (ex.: `VirtualMachines`) |
+| `[TipoRecurso]` | Uma aba por tipo de recurso (ex.: `VirtualMachines`), incluindo **Resource Type** ARM canônico após Name |
 | `AdvisorFindings` | Todas as recomendações do Advisor com pilar WAF |
 | `PolicyCompliance` | Recursos não conformes com policies |
 | `ResourceHealth` | Recursos com estado de saúde degradado/indisponível |

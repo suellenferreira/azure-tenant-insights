@@ -427,12 +427,12 @@ Trois fichiers sont générés par exécution :
 | Feuille | Contenu |
 |---|---|
 | `Overview` | Synthèse des KPI, principaux types de ressources, recommandations Advisor par pilier WAF, **Resource Origin** (Azure-native / Hybrid-Arc / Migrate), synthèse **Service Model** (IaaS/PaaS/SaaS/Hybrid/Supporting) et **Data Collection Notes** |
-| `Index` | Feuille de navigation (placée après `Overview`) avec un lien hypertexte vers chaque onglet ; chaque feuille comporte un lien de retour **↩ Index** |
+| `Index` | Feuille de navigation (après `Overview`) avec Sheet, **Resource Type** ARM canonique, **Description**, **Resource Count** et lien ; les onglets sans type sont identifiés comme feuilles de synthèse du classeur |
 | `Classification` | **Taxonomie** des ressources par type — Technical Category, Business Pillar, Service Model, Publisher (Microsoft/Third-party) — avec tableaux croisés de synthèse (pilotés par la configuration) |
 | `ModernizationSignals` | *(INFÉRÉ)* Cloud Modernization & Opportunity — score par dimension (0–100), niveau, confiance, signal inféré, éléments probants associés, indicateur d’opportunité et références aux référentiels |
 | `Subscriptions` | Agrégation des ressources par abonnement, groupe de ressources, emplacement et type de ressource |
 | `AllResources` | Table plate couvrant tous les types avec les colonnes communes Azure Resource Graph / ARM, une colonne **Category** (Azure-native / Hybrid-Arc / Migrate), les colonnes **Business Pillar** et **Service Model**, et les propriétés brutes |
-| `[ResourceType]` | Une feuille par type de ressource utilisant les noms d’affichage configurés et l’enrichissement déclaratif des propriétés |
+| `[ResourceType]` | Une feuille par type de ressource utilisant les noms d’affichage configurés et l’enrichissement déclaratif ; inclut **Resource Type** ARM canonique après Name |
 | `AdvisorFindings` | Toutes les recommandations Advisor avec le pilier WAF |
 | `PolicyCompliance` | Ressources non conformes |
 | `ResourceHealth` | Ressources dégradées/indisponibles |

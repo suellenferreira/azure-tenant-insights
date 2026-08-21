@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Excel resource-type context**
+- Expanded `Index` with canonical ARM Resource Type, friendly Description, Resource Count, and navigation link.
+- Added canonical Resource Type to every dedicated resource-type worksheet.
+- Added explicit descriptions distinguishing Power BI Dedicated from Microsoft Fabric F-SKU capacities.
+
 **Actionable catalog review automation**
 - Monthly maintenance now opens a PR only for actionable findings and publishes catalog-specific evidence, guidance, reviewer decisions, and a completion checklist.
 - Added weekly PR follow-up with a 7-day reminder, 14-day overdue label, 30-day tracking issue, and automatic issue closure.

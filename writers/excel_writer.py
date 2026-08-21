@@ -135,7 +135,7 @@ def write_excel(scan_data: dict, output_path: str) -> None:
 
     # Navigation: Index sheet (positioned right after Overview) + per-sheet
     # "back to Index" links.
-    _write_index_sheet(wb)
+    _write_index_sheet(wb, scan_data, sheet_map)
     _add_back_links(wb)
 
     wb.save(output_path)
@@ -294,6 +294,15 @@ def _resource_display_name(resource_type: str, inventory_config: dict) -> str:
 
     type_config = inventory_config.get("resource_types", {}).get(resource_type, {})
     return type_config.get("display_name") or clean_resource_type(resource_type)
+
+
+def _resource_description(resource_type: str, inventory_config: dict) -> str:
+    type_config = inventory_config.get("resource_types", {}).get(resource_type, {})
+    description = type_config.get("description")
+    if description:
+        return description
+    display_name = _resource_display_name(resource_type, inventory_config)
+    return f"{display_name} resources ({resource_type})"
 
 
 def _sheet_name_for_type(resource_type: str, inventory_config: dict) -> str:
@@ -1673,7 +1682,7 @@ def _write_resource_type_sheets(wb, scan_data: dict, include_tags: bool, sheet_m
         enriched_cols = _enriched_columns(rtype, resources, inventory_config)
 
         base_headers = [
-            "Name", "Resource Group", "Subscription", "Subscription ID",
+            "Name", "Resource Type", "Resource Group", "Subscription", "Subscription ID",
             "Location", "Kind", "SKU Name", "SKU Tier",
             "Provisioning State", "Created Time", "Identity Type", "Zones",
         ]
@@ -1692,22 +1701,23 @@ def _write_resource_type_sheets(wb, scan_data: dict, include_tags: bool, sheet_m
             sid = resource.get("subscriptionId", "")
 
             ws.cell(row=row, column=1).value = resource.get("name", "")
-            ws.cell(row=row, column=2).value = resource.get("resourceGroup", "")
-            ws.cell(row=row, column=3).value = sub_names.get(sid, "")
-            ws.cell(row=row, column=4).value = sid
-            ws.cell(row=row, column=5).value = resource.get("location", "")
-            ws.cell(row=row, column=6).value = safe_str(resource.get("kind", ""))
-            ws.cell(row=row, column=7).value = _sku_value(resource, "name")
-            ws.cell(row=row, column=8).value = _sku_value(resource, "tier")
-            ws.cell(row=row, column=9).value = safe_str(_common_resource_value(resource, "provisioningState"))
-            ws.cell(row=row, column=10).value = safe_str(_common_resource_value(resource, "createdTime"))
-            ws.cell(row=row, column=11).value = safe_str(_common_resource_value(resource, "identityType"))
-            ws.cell(row=row, column=12).value = safe_str(resource.get("zones", ""))
+            ws.cell(row=row, column=2).value = resource.get("type") or rtype
+            ws.cell(row=row, column=3).value = resource.get("resourceGroup", "")
+            ws.cell(row=row, column=4).value = sub_names.get(sid, "")
+            ws.cell(row=row, column=5).value = sid
+            ws.cell(row=row, column=6).value = resource.get("location", "")
+            ws.cell(row=row, column=7).value = safe_str(resource.get("kind", ""))
+            ws.cell(row=row, column=8).value = _sku_value(resource, "name")
+            ws.cell(row=row, column=9).value = _sku_value(resource, "tier")
+            ws.cell(row=row, column=10).value = safe_str(_common_resource_value(resource, "provisioningState"))
+            ws.cell(row=row, column=11).value = safe_str(_common_resource_value(resource, "createdTime"))
+            ws.cell(row=row, column=12).value = safe_str(_common_resource_value(resource, "identityType"))
+            ws.cell(row=row, column=13).value = safe_str(resource.get("zones", ""))
 
-            for e_idx, e_col in enumerate(enriched_cols, 13):
+            for e_idx, e_col in enumerate(enriched_cols, 14):
                 ws.cell(row=row, column=e_idx).value = safe_str(resource.get(e_col))
 
-            next_col = 13 + len(enriched_cols)
+            next_col = 14 + len(enriched_cols)
             if include_tags:
                 tags = resource.get("tags") or {}
                 ws.cell(row=row, column=next_col).value = json.dumps(tags) if tags else ""
@@ -1736,10 +1746,10 @@ def _write_resource_type_sheets(wb, scan_data: dict, include_tags: bool, sheet_m
                 cmt.height = max(60, 22 * min(len(row_findings), 5))
                 ws.cell(row=row, column=1).comment = cmt
 
-        _col_widths(ws, [34, 28, 34, 38, 18, 18, 22, 16, 20, 22, 18, 16] + [24] * len(enriched_cols) + [40, 60, 80])
+        _col_widths(ws, [34, 46, 28, 34, 38, 18, 18, 22, 16, 20, 22, 18, 16] + [24] * len(enriched_cols) + [40, 60, 80])
 
 
-def _write_index_sheet(wb):
+def _write_index_sheet(wb, scan_data: dict, sheet_map: Dict[str, str]):
     """Create a navigation Index sheet listing every tab with a hyperlink,
     positioned right after Overview."""
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -1748,7 +1758,9 @@ def _write_index_sheet(wb):
     ws = wb.create_sheet("Index")
     ws.sheet_view.showGridLines = False
 
-    ws.merge_cells("A1:C1")
+    from collectors.resources import load_enrichment_config
+
+    ws.merge_cells("A1:F1")
     title = ws["A1"]
     title.value = "Index — Workbook Navigation"
     title.font = Font(bold=True, size=16, color="FFFFFF")
@@ -1758,9 +1770,16 @@ def _write_index_sheet(wb):
 
     ws["A2"].value = "#"
     ws["B2"].value = "Sheet"
-    ws["C2"].value = "Go"
-    _header_style(ws, 2, 3)
+    ws["C2"].value = "Resource Type"
+    ws["D2"].value = "Description"
+    ws["E2"].value = "Resource Count"
+    ws["F2"].value = "Go"
+    _header_style(ws, 2, 6)
     _freeze(ws, 3)
+
+    inventory_config = load_enrichment_config()
+    resources_by_type = scan_data.get("resources_by_type", {})
+    type_by_sheet = {sheet_name: resource_type for resource_type, sheet_name in sheet_map.items()}
 
     link_font = Font(color="0563C1", underline="single")
     row = 3
@@ -1772,7 +1791,16 @@ def _write_index_sheet(wb):
         name_cell = ws.cell(row=row, column=2)
         name_cell.value = name
         name_cell.font = Font(size=10)
-        link_cell = ws.cell(row=row, column=3)
+        resource_type = type_by_sheet.get(name, "")
+        if resource_type:
+            ws.cell(row=row, column=3).value = resource_type
+            ws.cell(row=row, column=4).value = _resource_description(
+                resource_type, inventory_config
+            )
+            ws.cell(row=row, column=5).value = len(resources_by_type.get(resource_type, []))
+        else:
+            ws.cell(row=row, column=4).value = "Workbook summary or assessment sheet"
+        link_cell = ws.cell(row=row, column=6)
         link_cell.value = "Open →"
         link_cell.hyperlink = Hyperlink(
             ref=link_cell.coordinate, location=f"'{name}'!A1", display=name
@@ -1782,7 +1810,7 @@ def _write_index_sheet(wb):
         row += 1
         n += 1
 
-    _col_widths(ws, [6, 42, 14])
+    _col_widths(ws, [6, 32, 48, 58, 16, 14])
 
     # Move Index to position 1 (right after Overview at position 0).
     wb.move_sheet(ws, offset=1 - wb.index(ws))

@@ -451,12 +451,12 @@ Three files are generated per run:
 | Sheet | Contents |
 |---|---|
 | `Overview` | KPI summary, top resource types, Advisor by WAF pillar, **Resource Origin** (Azure-native / Hybrid-Arc / Migrate), a **Service Model** summary (IaaS/PaaS/SaaS/Hybrid/Supporting), and **Data Collection Notes** |
-| `Index` | Navigation sheet (positioned after `Overview`) with a hyperlink to every tab; each sheet has a **↩ Index** back-link |
+| `Index` | Navigation sheet (after `Overview`) with Sheet, canonical ARM **Resource Type**, friendly **Description**, **Resource Count**, and hyperlink; non-resource tabs are identified as workbook summary sheets |
 | `Classification` | Resource **taxonomy** per type — Technical Category, Business Pillar, Service Model, Publisher (Microsoft/Third-party) — with summary pivots (config-driven) |
 | `ModernizationSignals` | *(INFERRED)* Cloud Modernization & Opportunity — per-dimension score (0–100), level, confidence, inferred signal, supporting evidence, opportunity flag, and framework references |
 | `Subscriptions` | Resource aggregation by subscription, resource group, location, and resource type |
 | `AllResources` | Flat table across all types with common Azure Resource Graph / ARM columns, a **Category** column (Azure-native / Hybrid-Arc / Migrate), **Business Pillar** and **Service Model** columns, and raw properties |
-| `[ResourceType]` | One sheet per resource type using configured display names and declarative property enrichment |
+| `[ResourceType]` | One sheet per resource type using configured display names and declarative property enrichment; includes canonical ARM **Resource Type** after Name |
 | `AdvisorFindings` | All Advisor recommendations with WAF pillar |
 | `PolicyCompliance` | Non-compliant resources |
 | `ResourceHealth` | Degraded/unavailable resources |

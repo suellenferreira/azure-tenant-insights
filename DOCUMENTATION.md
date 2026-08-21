@@ -569,7 +569,8 @@ Adds three Defender for Cloud capabilities on top of the existing assessments co
 Adds navigation, classification, and transparency features across the Excel workbook and both HTML reports.
 
 **Excel (`writers/excel_writer.py`):**
-- **Index sheet** — positioned right after `Overview`, lists every worksheet with a hyperlink; each sheet carries a **↩ Index** back-link.
+- **Index sheet** — positioned right after `Overview`, lists every worksheet with a hyperlink. Resource-type rows include canonical ARM `Resource Type`, configured/fallback description, and resource count; fixed assessment tabs are identified as workbook summary sheets. Each sheet carries a **↩ Index** back-link.
+- **Resource-type context** — every dedicated resource-type sheet includes canonical ARM `Resource Type` immediately after `Name`, preserving context when rows are copied or exported.
 - **Collision-free sheet naming** — a single, shared `resource_type → sheet name` map. A short namespace token is prefixed **only** when two providers would otherwise produce the same name (e.g., `Cmp-Virtualmachinetemplates` vs `VMw-Virtualmachinetemplates`).
 - **All types up to the Excel limit** — every resource type gets its own sheet up to Excel's hard cap of 255; the remainder stay in `AllResources`. A **scope-aware warning** is logged when the type-sheet count is high (subscription ≥ 40, management group ≥ 60, tenant ≥ 75; env-overridable), plus a hard warning at 200.
 - **Category classification** — `AllResources` gains a **Category** column (Azure-native / Hybrid-Arc / Migrate) and `Overview` gains a **Resource Origin** summary.

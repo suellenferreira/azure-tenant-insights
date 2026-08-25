@@ -27,6 +27,10 @@ PAGE_SIZE = 1000
 CLI_MAX_RETRIES = 3
 CLI_BACKOFF_BASE = 2.0  # seconds; exponential: 2s, 4s, 8s
 
+# Transient network errors (connection reset, aborted, etc.)
+NETWORK_MAX_RETRIES = 3
+NETWORK_BACKOFF_BASE = 2.0
+
 # Resource Graph throttling policy (per page)
 MAX_429_RETRIES = 5
 DEFAULT_429_RETRY_DELAY = 30
@@ -114,6 +118,7 @@ def query_resource_graph(
         page = 0
         cli_retries = 0  # transient AzureCliCredential subprocess failures
         rate_limit_retries = 0
+        network_retries = 0  # transient connection errors
 
         while True:
             page += 1
@@ -141,6 +146,9 @@ def query_resource_graph(
             except Exception as e:
                 error_msg = str(e)
                 status_code = getattr(getattr(e, "response", None), "status_code", None)
+                is_connection_error = isinstance(
+                    e.__cause__ or e, (ConnectionError, ConnectionResetError, OSError)
+                ) or "Connection aborted" in error_msg or "ConnectionReset" in error_msg
                 if status_code == 429 or "429" in error_msg or "TooManyRequests" in error_msg:
                     if rate_limit_retries >= MAX_429_RETRIES:
                         log.warning(
@@ -176,12 +184,24 @@ def query_resource_graph(
                     time.sleep(backoff)
                     page -= 1  # do not advance the page counter on retry
                     continue
+                elif is_connection_error and network_retries < NETWORK_MAX_RETRIES:
+                    network_retries += 1
+                    backoff = NETWORK_BACKOFF_BASE * (2 ** (network_retries - 1))
+                    log.warning(
+                        f"Connection error (transient, attempt "
+                        f"{network_retries}/{NETWORK_MAX_RETRIES} for page {page}). "
+                        f"Retrying in {backoff:.0f}s... ({error_msg[:120]})"
+                    )
+                    time.sleep(backoff)
+                    page -= 1
+                    continue
                 else:
                     log.error(f"Resource Graph query failed (page {page}): {error_msg[:300]}")
                     break
 
             cli_retries = 0  # reset after a successful page
             rate_limit_retries = 0  # retry budget is independent for each page
+            network_retries = 0
             data = resp.data or []
             all_results.extend(data)
 

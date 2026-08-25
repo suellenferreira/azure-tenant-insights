@@ -427,6 +427,14 @@ Todas las fuentes de datos están **activas por defecto**. Usa `--skip-*` para e
 
 > **Principio de Mínimo Privilegio:** ATI es 100% de solo lectura. No realiza ningún cambio en ningún recurso de Azure.
 
+### Errores de recopilación de costos
+
+- `HTTP 400`: no se reintenta. Revise el código y mensaje de Azure en la advertencia. Las causas comunes incluyen una oferta de suscripción/facturación no compatible, datos de costos no disponibles para el período o una limitación de consulta/API; los errores de permisos normalmente devuelven `401` o `403`.
+- `HTTP 401/403`: compruebe `Cost Management Reader` (o un rol de facturación equivalente) en la suscripción o ámbito de facturación aplicable y vuelva a autenticarse.
+- `HTTP 429` o `5xx` transitorio: ATI respeta `Retry-After` cuando está disponible y, en caso contrario, usa espera exponencial limitada. Después de cinco reintentos, la advertencia informa intentos, request ID de Azure y recomienda esperar, reducir frecuencia/ámbito o usar `--skip-costs`.
+
+La recopilación de costos es opcional. Su error no invalida el inventario ni otros collectors, pero la sección de costos puede faltar o estar incompleta. Incluya el request ID al abrir un caso de soporte de Azure.
+
 ---
 
 ## Archivos de Salida

@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Cost Management retry and diagnostics**
+- Added bounded retries for `429` and transient `5xx` responses, honoring `Retry-After` with exponential fallback.
+- Cost warnings now include the HTTP status, Azure error code/message, attempt count, request ID, likely cause, and an actionable next step.
+- Clarified that `400` is not automatically a permission failure, while `401/403` points to Cost Management RBAC.
+
 **Excel resource-type context**
 - Expanded `Index` with canonical ARM Resource Type, friendly Description, Resource Count, and navigation link.
 - Added canonical Resource Type to every dedicated resource-type worksheet.

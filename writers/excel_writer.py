@@ -115,6 +115,10 @@ def write_excel(scan_data: dict, output_path: str) -> None:
     _write_subscriptions_sheet(wb, scan_data)
     _write_all_resources_sheet(wb, scan_data, include_tags, sheet_map)
     _write_resource_type_sheets(wb, scan_data, include_tags, sheet_map)
+
+    if scan_data.get("costs_data"):
+        _write_costs_sheet(wb, scan_data)
+
     _write_advisor_sheet(wb, scan_data)
     _write_policy_sheet(wb, scan_data)
     _write_health_sheet(wb, scan_data)
@@ -129,9 +133,6 @@ def write_excel(scan_data: dict, output_path: str) -> None:
         _write_defender_posture_sheet(wb, scan_data)
         _write_defender_servers_coverage_sheet(wb, scan_data)
         _write_defender_coverage_gap_sheet(wb, scan_data)
-
-    if scan_data.get("costs_data"):
-        _write_costs_sheet(wb, scan_data)
 
     # Navigation: Index sheet (positioned right after Overview) + per-sheet
     # "back to Index" links.
@@ -1029,6 +1030,53 @@ def _write_overview_sheet(wb, scan_data: dict):
 
     _pil_bar_rows = int(_pil_bar_h / 0.5) + 2
     _pil_band_end = _pil_tbl_hdr + max(_pil_n, _pil_bar_rows)
+
+    # Section 3c: Cost Summary side-by-side with Business Pillar (cols K-P)
+    costs_data = scan_data.get("costs_data", [])
+    if costs_data:
+        from collections import defaultdict as _ddict
+        _by_svc: dict = _ddict(float)
+        _by_rg: dict = _ddict(float)
+        _cur = ""
+        for _rec in costs_data:
+            _cv = _rec.get("Cost", _rec.get("totalCost", 0)) or 0
+            _sn = _rec.get("ServiceName", _rec.get("serviceName", "Unknown"))
+            _rn = _rec.get("ResourceGroupName", _rec.get("resourceGroupName", "Unknown"))
+            if not _cur:
+                _cur = _rec.get("Currency", _rec.get("currency", ""))
+            _by_svc[_sn] += _cv
+            _by_rg[_rn] += _cv
+        _cost_col = 11  # column K
+        _cost_row = _pil_header_row
+        ws.merge_cells(start_row=_cost_row, start_column=_cost_col,
+                       end_row=_cost_row, end_column=_cost_col + 5)
+        _ch = ws.cell(_cost_row, _cost_col)
+        _ch.value = "COST SUMMARY \u2014 MONTH-TO-DATE"
+        _ch.fill = section_header_fill
+        _ch.font = section_header_font
+        _ch.alignment = Alignment(horizontal="center", vertical="center")
+        _svc_hdr = _cost_row + 1
+        ws.cell(_svc_hdr, _cost_col).value = "Service Name"
+        ws.cell(_svc_hdr, _cost_col + 1).value = f"Cost ({_cur})" if _cur else "Cost"
+        for _ci in (_cost_col, _cost_col + 1):
+            ws.cell(_svc_hdr, _ci).font = Font(bold=True, size=10, color="FFFFFF")
+            ws.cell(_svc_hdr, _ci).fill = PatternFill("solid", fgColor="1F4E79")
+        _top_svc = sorted(_by_svc.items(), key=lambda x: -x[1])[:5]
+        for _i, (_name, _val) in enumerate(_top_svc):
+            _r = _svc_hdr + 1 + _i
+            ws.cell(_r, _cost_col).value = _name
+            ws.cell(_r, _cost_col + 1).value = round(_val, 2)
+        _rg_col = _cost_col + 3  # column N
+        ws.cell(_svc_hdr, _rg_col).value = "Resource Group"
+        ws.cell(_svc_hdr, _rg_col + 1).value = f"Cost ({_cur})" if _cur else "Cost"
+        for _ci in (_rg_col, _rg_col + 1):
+            ws.cell(_svc_hdr, _ci).font = Font(bold=True, size=10, color="FFFFFF")
+            ws.cell(_svc_hdr, _ci).fill = PatternFill("solid", fgColor="1F4E79")
+        _top_rg = sorted(_by_rg.items(), key=lambda x: -x[1])[:5]
+        for _i, (_name, _val) in enumerate(_top_rg):
+            _r = _svc_hdr + 1 + _i
+            ws.cell(_r, _rg_col).value = _name
+            ws.cell(_r, _rg_col + 1).value = round(_val, 2)
 
     # Section 4: Microsoft References (5 links)
     _REFERENCES = [
@@ -2057,7 +2105,7 @@ def _write_defender_sheet(wb, scan_data: dict):
 
 def _write_costs_sheet(wb, scan_data: dict):
     ws = wb.create_sheet("Costs")
-    headers = ["Subscription ID", "Resource Group", "Service Name", "Currency", "Total Cost (MTD)"]
+    headers = ["Subscription ID", "Resource Group", "Service Name", "Currency", "Cost (Month-to-Date)"]
     for col, h in enumerate(headers, 1):
         ws.cell(row=1, column=col).value = h
     _header_style(ws, 1, len(headers))

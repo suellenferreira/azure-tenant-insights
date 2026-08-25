@@ -414,6 +414,14 @@ Toutes les sources de données sont **activées par défaut**. Utilisez les indi
 
 > **Principe du moindre privilège :** ATI fonctionne à 100 % en lecture seule. Il n’apporte aucune modification aux ressources Azure.
 
+### Erreurs de collecte des coûts
+
+- `HTTP 400` : aucune nouvelle tentative. Consultez le code et le message Azure dans l’avertissement. Les causes courantes incluent une offre d’abonnement/facturation non prise en charge, l’absence de données de coût pour la période ou une limitation de requête/API ; les problèmes d’autorisation renvoient normalement `401` ou `403`.
+- `HTTP 401/403` : vérifiez `Cost Management Reader` (ou un rôle de facturation équivalent) sur l’abonnement ou l’étendue de facturation applicable, puis authentifiez-vous de nouveau.
+- `HTTP 429` ou `5xx` transitoire : ATI respecte `Retry-After` lorsqu’il est fourni et utilise sinon une attente exponentielle limitée. Après cinq nouvelles tentatives, l’avertissement indique le nombre de tentatives, le request ID Azure et conseille d’attendre, de réduire la fréquence/l’étendue ou d’utiliser `--skip-costs`.
+
+La collecte des coûts est facultative. Son échec n’invalide pas l’inventaire ni les autres collectors, mais la section des coûts peut être absente ou incomplète. Incluez le request ID lors de l’ouverture d’un ticket Azure.
+
 ---
 
 ## Fichiers de sortie

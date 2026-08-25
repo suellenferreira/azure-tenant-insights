@@ -107,6 +107,7 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
 
     resiliency = build_resiliency_assessment(scan_data)
     resiliency_html = _build_resiliency_exec_html(resiliency)
+    cost_exec_html = _build_cost_exec_html(scan_data.get("costs_data", []))
 
     # Item 0: Build collection warnings note for report footer
     collection_warnings = scan_data.get("collection_warnings", [])
@@ -167,6 +168,7 @@ def write_executive_report(scan_data: dict, output_path: str) -> None:
         defender_plan_counts=defender_plan_counts,
         warnings_html=warnings_html,
         catalog_disclaimer_html=catalog_disclaimer_html,
+        cost_exec_html=cost_exec_html,
     )
 
     with open(output_path, "w", encoding="utf-8") as f:
@@ -940,6 +942,39 @@ def _build_resiliency_exec_html(assessment: dict) -> str:
     </div>"""
 
 
+def _build_cost_exec_html(costs_data: list) -> str:
+    if not costs_data:
+        return ""
+    import json as _json
+    from collections import defaultdict
+    by_service: dict = defaultdict(float)
+    currency = ""
+    for rec in costs_data:
+        cost = rec.get("Cost", rec.get("totalCost", 0)) or 0
+        service = rec.get("ServiceName", rec.get("serviceName", "Unknown"))
+        if not currency:
+            currency = rec.get("Currency", rec.get("currency", ""))
+        by_service[service] += cost
+    top5 = sorted(by_service.items(), key=lambda x: -x[1])[:5]
+    total = sum(by_service.values())
+    cur = f" ({currency})" if currency else ""
+    labels = _json.dumps([s[0] for s in top5])
+    values = _json.dumps([round(s[1], 2) for s in top5])
+    return f"""
+    <div class="section" id="cost-summary">
+        <h2>💰 Cost Summary — Top Services (Month-to-Date){cur}</h2>
+        <p class="evidence-note">Month-to-date spend (1st of the month through the scan date). Top 5 services by spend. Full breakdown by service and resource group is in the Technical Report and the Costs Excel sheet.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start">
+            <div class="chart-box" style="height:220px"><canvas id="costChart"></canvas></div>
+            <div class="mod-kpis" style="margin-top:.5rem">
+                <div class="mod-chip"><div class="chip-val">${total:,.0f}</div><div class="chip-lbl">Total Month-to-Date{cur}</div></div>
+                <div class="mod-chip"><div class="chip-val">{len(by_service)}</div><div class="chip-lbl">Services with cost</div></div>
+            </div>
+        </div>
+        <script>(function(){{var ctx=document.getElementById('costChart');if(ctx)new Chart(ctx.getContext('2d'),{{type:'doughnut',data:{{labels:{labels},datasets:[{{data:{values},backgroundColor:['#1F4E79','#2E86AB','#A23B72','#F18F01','#548235'],borderWidth:2,borderColor:'#fff'}}]}},options:{{responsive:true,maintainAspectRatio:false,plugins:{{legend:{{position:'right',labels:{{font:{{size:11}}}}}}}}}}}});}})();</script>
+    </div>"""
+
+
 def _render_html(
     scan_date, tenant_id, tenant_name, subscriptions_list, summary, risk_level, risk_color,
     top_findings, pillar_labels, pillar_values,
@@ -949,6 +984,7 @@ def _render_html(
     defender_plan_counts=None,
     warnings_html="",
     catalog_disclaimer_html="",
+    cost_exec_html="",
 ) -> str:
     PRI_COLORS = {"Critical": "#C00000", "High": "#FF4444", "Medium": "#FFC000", "Low": "#70AD47"}
 
@@ -1174,6 +1210,8 @@ body{{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8
     </details>
 
   <div class="section" id="regions"><h2>🌍 Active Regions Distribution</h2><div class="chart-box" style="height:250px"><canvas id="regionChart"></canvas></div></div>
+
+  {cost_exec_html}
 
   {modernization_html}
 

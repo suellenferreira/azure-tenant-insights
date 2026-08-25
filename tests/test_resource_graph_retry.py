@@ -76,6 +76,24 @@ class ResourceGraphRetryTests(unittest.TestCase):
 
         self.assertEqual(results, [{"id": "one"}])
 
+    def test_connection_reset_is_retried_then_succeeds(self) -> None:
+        success_page = SimpleNamespace(data=[{"id": "recovered"}], skip_token=None)
+        client = MagicMock()
+        conn_err = ConnectionResetError(10054, "Connection forcibly closed")
+        client.resources.side_effect = [conn_err, success_page]
+
+        with patch(
+            "azure.mgmt.resourcegraph.ResourceGraphClient", return_value=client
+        ):
+            with patch("collectors.resource_graph.time.sleep") as sleep:
+                results = query_resource_graph(
+                    object(), "Resources", ["sub-1"], throttle_delay=0
+                )
+
+        self.assertEqual(results, [{"id": "recovered"}])
+        self.assertEqual(client.resources.call_count, 2)
+        sleep.assert_called_once_with(2.0)
+
 
 if __name__ == "__main__":
     unittest.main()

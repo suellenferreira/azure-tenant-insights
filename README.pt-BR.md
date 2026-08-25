@@ -424,6 +424,14 @@ python invoke_ati.py
 
 > **Princípio do Menor Privilégio:** O ATI é 100% somente leitura. Nenhuma alteração é feita em nenhum recurso Azure.
 
+### Erros na coleta de custos
+
+- `HTTP 400`: não recebe retry. Consulte o código e a mensagem Azure no warning. Causas comuns incluem oferta de assinatura/billing não suportada, ausência de dados de custo no período ou limitação da query/API; falhas de permissão normalmente retornam `401` ou `403`.
+- `HTTP 401/403`: valide `Cost Management Reader` (ou role de billing equivalente) na assinatura ou no escopo de billing aplicável e autentique novamente.
+- `HTTP 429` ou `5xx` transitório: o ATI respeita `Retry-After` quando fornecido e, caso contrário, usa espera exponencial limitada. Após cinco retries, o warning informa tentativas, request ID do Azure e orienta aguardar, reduzir frequência/escopo do scan ou usar `--skip-costs`.
+
+A coleta de custos é opcional. Sua falha não invalida o inventário nem os demais collectors, mas a seção de custos pode ficar ausente ou incompleta. Informe o request ID exibido ao abrir um chamado Azure.
+
 ---
 
 ## Arquivos de Saída

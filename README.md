@@ -438,6 +438,14 @@ All data sources are **enabled by default**. Use `--skip-*` flags to exclude the
 
 > **Principle of Least Privilege:** ATI is 100% read-only. It makes no changes to any Azure resource.
 
+### Cost collection errors
+
+- `HTTP 400`: not retried. Read the Azure error code/message in the warning. Typical causes are an unsupported billing/subscription offer, unavailable cost data for the period, or a query/API limitation; permission failures normally return `401` or `403`.
+- `HTTP 401/403`: verify `Cost Management Reader` (or an equivalent billing role) at the subscription or applicable billing scope, then authenticate again.
+- `HTTP 429` or transient `5xx`: ATI honors `Retry-After` when supplied and otherwise uses bounded exponential delays. After five retries, the warning reports the attempt count, Azure request ID, and suggests waiting, reducing scan frequency/scope, or using `--skip-costs`.
+
+Cost collection is optional. Failure does not invalidate inventory or other collectors, but the generated cost section may be absent or incomplete. Include the reported request ID when opening an Azure support case.
+
 ---
 
 ## Output Files

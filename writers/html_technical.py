@@ -179,6 +179,8 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
     resiliency = build_resiliency_assessment(scan_data)
     resiliency_html = _build_resiliency_technical_html(resiliency)
 
+    cost_section_html = _build_cost_section_html(scan_data.get("costs_data", []))
+
     # Item 0: Build collection warnings note for report footer
     collection_warnings = scan_data.get("collection_warnings", [])
     if collection_warnings:
@@ -212,6 +214,7 @@ def write_technical_report(scan_data: dict, output_path: str) -> None:
         zerotrust_html=zerotrust_html,
         arc_section=arc_section, modernization_detail_html=modernization_detail_html,
         resiliency_html=resiliency_html,
+        cost_section_html=cost_section_html,
         region_summary=region_summary,
         sub_labels=sub_labels, sub_values=sub_values,
         sev_labels=sev_labels, sev_values=sev_values,
@@ -1884,6 +1887,55 @@ def _build_resiliency_technical_html(assessment: dict) -> str:
         """
 
 
+def _build_cost_section_html(costs_data: list) -> str:
+    if not costs_data:
+        return ""
+    from collections import defaultdict
+    by_service: dict = defaultdict(float)
+    by_rg: dict = defaultdict(float)
+    currency = ""
+    for rec in costs_data:
+        cost = rec.get("Cost", rec.get("totalCost", 0)) or 0
+        service = rec.get("ServiceName", rec.get("serviceName", "Unknown"))
+        rg = rec.get("ResourceGroupName", rec.get("resourceGroupName", "Unknown"))
+        if not currency:
+            currency = rec.get("Currency", rec.get("currency", ""))
+        by_service[service] += cost
+        by_rg[rg] += cost
+    total = sum(by_service.values())
+    cur = f" ({currency})" if currency else ""
+    top_services = sorted(by_service.items(), key=lambda x: -x[1])
+    top_rgs = sorted(by_rg.items(), key=lambda x: -x[1])
+    svc_rows = "".join(
+        f'<tr><td>{name}</td><td class="num">{val:,.2f}</td></tr>'
+        for name, val in top_services
+    )
+    rg_rows = "".join(
+        f'<tr><td>{name}</td><td class="num">{val:,.2f}</td></tr>'
+        for name, val in top_rgs
+    )
+    return f"""<div class="section" id="costs">
+        <h2>💰 Cost Summary (Month-to-Date){cur} <span class="cnt">{total:,.2f}</span></h2>
+        <p class="note">Month-to-date spend aggregated from Azure Cost Management API (1st of the month through the scan date). Excludes marketplace and reserved-instance amortization unless visible to the query scope.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1rem">
+            <div>
+                <h3 style="color:#1F4E79;font-size:.95rem;margin-bottom:.5rem">By Service Name</h3>
+                <div class="table-scroll"><table class="dtable" id="tbl-cost-service" data-paginate="5" data-page-step="5">
+                    <thead><tr><th>Service</th><th class="num">Cost{cur}</th></tr></thead>
+                    <tbody>{svc_rows}</tbody>
+                </table></div>
+            </div>
+            <div>
+                <h3 style="color:#1F4E79;font-size:.95rem;margin-bottom:.5rem">By Resource Group</h3>
+                <div class="table-scroll"><table class="dtable" id="tbl-cost-rg" data-paginate="5" data-page-step="5">
+                    <thead><tr><th>Resource Group</th><th class="num">Cost{cur}</th></tr></thead>
+                    <tbody>{rg_rows}</tbody>
+                </table></div>
+            </div>
+        </div>
+    </div>"""
+
+
 def _build_technical_categories_section(resources_by_type: dict) -> str:
     """
     Generate a section showing the Top 5 Technical Categories by resource count,
@@ -1928,7 +1980,7 @@ def _render_html(
     scan_date, tenant_id, tenant_name, subscriptions_list, summary,
     inventory_html, technical_categories_html, waf_html, policy_html, policy_summary_html, misconfig_html,
     health_html, deprecated_html, lz_html,
-    defender_section, zerotrust_html, arc_section, modernization_detail_html, resiliency_html, region_summary,
+    defender_section, zerotrust_html, arc_section, modernization_detail_html, resiliency_html, cost_section_html, region_summary,
     sub_labels, sub_values, sev_labels, sev_values,
     has_defender, has_arc,
     policy_count, misconfig_count, health_count,
@@ -2100,6 +2152,7 @@ summary.mod-h3:hover{{color:#2E86AB}}
   <div class="sidebar-logo">⚡ ATI Technical</div>
       <h3>Overview</h3>
   <a href="#inventory">📦 Resource Inventory</a>
+  {'<a href="#costs">💰 Cost Summary</a>' if cost_section_html else ''}
   <a href="#technical-categories">📊 Technical Categories</a>
   {arc_nav}
   <a href="#regions">🌍 Regional Distribution</a>
@@ -2164,6 +2217,8 @@ summary.mod-h3:hover{{color:#2E86AB}}
       <p class="note">All resource types discovered dynamically via Azure Resource Graph.</p>
       {inventory_html}
     </div>
+
+    {cost_section_html}
 
     {technical_categories_html}
 

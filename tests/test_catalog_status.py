@@ -7,11 +7,11 @@ from writers.catalog_status import catalog_badge_html, catalog_status_html
 
 class CatalogStatusTests(unittest.TestCase):
     def test_status_thresholds_and_warning_generation(self) -> None:
-        status = load_catalog_status(as_of=date(2026, 11, 30))
+        status = load_catalog_status(as_of=date(2027, 3, 10))
         by_id = {item["id"]: item for item in status["catalogs"]}
 
         self.assertEqual(by_id["deprecated_types"]["status"], "stale")
-        self.assertEqual(by_id["misconfiguration_rules"]["status"], "review_due")
+        self.assertEqual(by_id["misconfiguration_rules"]["status"], "stale")
         self.assertEqual(status["overall_status"], "stale")
         self.assertTrue(catalog_warnings(status))
 
@@ -27,7 +27,7 @@ class CatalogStatusTests(unittest.TestCase):
         table = catalog_status_html(status)
         badge = catalog_badge_html(status, ("deprecated_types",))
 
-        self.assertIn("2026.08", table)
+        self.assertIn("2026.09", table)
         self.assertIn("evaluated locally", table)
         self.assertIn("Warnings do not block the scan", badge)
 
@@ -45,7 +45,7 @@ class CatalogStatusTests(unittest.TestCase):
 
         self.assertIn("older than 90 days", sheet["A1"].value)
         self.assertEqual(sheet["A4"].value, "Catalog")
-        self.assertEqual(sheet["C5"].value, "2026.08")
+        self.assertEqual(sheet["C5"].value, "2026.09")
         self.assertEqual(sheet["F5"].value, "current")
 
 

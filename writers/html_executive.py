@@ -673,9 +673,18 @@ def _mod_evidence_text(d: dict) -> str:
         fams = ev.get("families", {}) or {}
         present = [_fam_label(k) for k, v in fams.items() if v]
         absent = [_fam_label(k) for k, v in fams.items() if not v]
-        return (f"{ev.get('present', 0)}/{ev.get('total', 0)} modern platform families present"
+        base = (f"{ev.get('present', 0)}/{ev.get('total', 0)} modern platform families present"
                 + (f" — present: {', '.join(present)}" if present else "")
                 + (f"; absent: {', '.join(absent)}" if absent else ""))
+        dep_count = ev.get("deployments", 0)
+        if dep_count:
+            models = ev.get("deployment_models", {})
+            model_list = ", ".join(f"{k} ({v})" for k, v in sorted(models.items(), key=lambda x: -x[1]))
+            base += f"; {dep_count} model deployment(s): {model_list}"
+        proj_count = ev.get("foundry_projects", 0)
+        if proj_count:
+            base += f"; {proj_count} Foundry project(s)"
+        return base
     if m == "security":
         cov = ev.get("defender_coverage_pct")
         return (f"Defender {cov if cov is not None else 'n/a'}% · "
@@ -690,18 +699,45 @@ def _mod_evidence_text(d: dict) -> str:
 
 
 def _fam_checklist_html(d: dict) -> str:
-    """Present/absent checklist of modern service families (presence dims only)."""
+    """Present/absent checklist with sub-resource context for presence dimensions."""
     if d.get("method") != "presence":
         return ""
-    fams = (d.get("evidence", {}) or {}).get("families", {}) or {}
+    ev = d.get("evidence", {}) or {}
+    fams = ev.get("families", {}) or {}
     if not fams:
         return ""
-    items = "".join(
-        f'<span class="fam {"fam-yes" if v else "fam-no"}">'
-        f'{"✓" if v else "✗"} {_fam_label(k)}{f" ({v})" if v else ""}</span>'
-        for k, v in fams.items()
-    )
+    proj = ev.get("foundry_projects", 0)
+    items = ""
+    for k, v in fams.items():
+        label = _fam_label(k)
+        extra = ""
+        if v and k == "openai_ai_services" and proj:
+            extra = f", {proj} Foundry projects"
+        items += (
+            f'<span class="fam {"fam-yes" if v else "fam-no"}">'
+            f'{"✓" if v else "✗"} {label}{f" ({v}{extra})" if v else ""}</span>'
+        )
     return f'<div class="opp-fams">{items}</div>'
+
+
+def _family_details_html(d: dict) -> str:
+    """Collapsible sub-resource details inside a card (only when children exist)."""
+    ev = d.get("evidence", {}) or {}
+    parts = []
+    dep = ev.get("deployments", 0)
+    if dep:
+        models = ev.get("deployment_models", {})
+        model_list = ", ".join(f"{k} ({v})" for k, v in sorted(models.items(), key=lambda x: -x[1]))
+        parts.append(f"{dep} model deployment(s): {model_list}")
+    if not parts:
+        return ""
+    content = " · ".join(parts)
+    return (
+        f'<details style="margin-top:.3rem;font-size:.75rem;color:#2E86AB">'
+        f'<summary style="cursor:pointer">Service details</summary>'
+        f'<div style="margin-top:.2rem;padding-left:.5rem">{content}</div>'
+        f'</details>'
+    )
 
 
 def _build_modernization_exec_html(assessment: dict) -> str:
@@ -760,6 +796,7 @@ def _build_modernization_exec_html(assessment: dict) -> str:
     )
 
     dim_by_id = {d["id"]: d for d in dims}
+    opp_ids = {o["id"] for o in summary.get("top_opportunities", [])}
     cards = ""
     for o in summary.get("top_opportunities", []):
         d = dim_by_id.get(o["id"], {})
@@ -775,11 +812,73 @@ def _build_modernization_exec_html(assessment: dict) -> str:
             f'<div class="opp-bar"><span style="width:{score}%;background:{col}"></span></div>'
             f'<div style="font-size:.84rem;color:#333;margin-top:.4rem">{d.get("narrative", "")}</div>'
             f'{_fam_checklist_html(d)}'
+            f'{_family_details_html(d)}'
             f'<div class="opp-meta">Confidence: {o["confidence"]}'
             + (f' &middot; {fw}' if fw else "")
             + '</div></div>'
         )
     cards = cards or '<p class="no-data">No modernization opportunities identified above threshold.</p>'
+
+    # --- Other dimensions: split into Established Adoption vs Insufficient Data ---
+    other_all = [d for d in dims if d["id"] not in opp_ids and not d.get("context_only")]
+    established = [d for d in other_all if d.get("score") is not None
+                   and d.get("level") in ("Intermediate", "High")
+                   and d.get("confidence") != "Low"]
+    insufficient = [d for d in other_all if d not in established]
+
+    def _other_card(d: dict, use_color: bool = False) -> str:
+        score = d.get("score")
+        s_val = score if score is not None else 0
+        col = _band_color(score) if use_color else "#9AA0A6"
+        bar_col = col if use_color else "#bbb"
+        border_col = col if use_color else "#ccc"
+        opacity = "" if use_color else "opacity:.65;"
+        h4_style = "" if use_color else 'color:#666'
+        narr_color = "#333" if use_color else "#888"
+        meta_color = "" if use_color else 'color:#aaa'
+        fw = " · ".join(
+            f'<a href="{f.get("url", "#")}" target="_blank" style="color:#999">{f.get("name", "")}</a>'
+            for f in d.get("framework_refs", [])
+        )
+        return (
+            f'<div class="opp-card" style="border-left-color:{border_col};{opacity}">'
+            f'<h4 style="{h4_style}">{d.get("name", "")}<span class="opp-score" style="color:{col}" title="{_mod_evidence_text(d).replace(chr(34), chr(39))}">{score if score is not None else "N/A"}</span></h4>'
+            f'<div class="opp-bar"><span style="width:{s_val}%;background:{bar_col}"></span></div>'
+            f'<div style="font-size:.84rem;color:{narr_color};margin-top:.4rem">{d.get("narrative", "")}</div>'
+            f'{_fam_checklist_html(d)}'
+            f'{_family_details_html(d)}'
+            f'<div class="opp-meta" style="{meta_color}">Confidence: {d.get("confidence", "")}'
+            + (f' &middot; {fw}' if fw else "")
+            + f' &middot; {d.get("level", "")}</div></div>'
+        )
+
+    # Cross-reference: dimensions not in top opportunities
+    also_names = []
+    for d in established:
+        also_names.append(f'{d.get("name", "")} <span style="color:#aaa">(Established)</span>')
+    for d in insufficient:
+        also_names.append(f'{d.get("name", "")} <span style="color:#aaa">(Insufficient Data)</span>')
+    also_html = ""
+    if also_names:
+        also_html = f'<p style="font-size:.75rem;color:#999;margin-top:.6rem">Also assessed: {", ".join(also_names)}</p>'
+
+    other_section = ""
+    if established:
+        est_cards = "".join(_other_card(d, use_color=True) for d in established)
+        other_section += (
+            f'<details open style="margin-top:1rem"><summary style="cursor:pointer;color:#1F4E79;font-weight:600;font-size:.92rem">'
+            f'Established Adoption ({len(established)})</summary>'
+            f'<p style="font-size:.78rem;color:#888;margin:.5rem 0">Dimensions where the tenant already shows intermediate or high adoption. No immediate opportunity identified, but included for completeness.</p>'
+            f'<div class="opp-grid" style="margin-top:.8rem">{est_cards}</div></details>'
+        )
+    if insufficient:
+        ins_cards = "".join(_other_card(d) for d in insufficient)
+        other_section += (
+            f'<details style="margin-top:1rem"><summary style="cursor:pointer;color:#1F4E79;font-weight:600;font-size:.92rem">'
+            f'Insufficient Data to Infer Modernization ({len(insufficient)})</summary>'
+            f'<p style="font-size:.78rem;color:#888;margin:.5rem 0">Dimensions where data was limited, confidence is low, or no score could be computed. May warrant further investigation.</p>'
+            f'<div class="opp-grid" style="margin-top:.8rem">{ins_cards}</div></details>'
+        )
 
     qw = summary.get("quick_wins", [])
     qw_html = ""
@@ -818,6 +917,8 @@ def _build_modernization_exec_html(assessment: dict) -> str:
       </div>
       <div class="opp-grid">{cards}</div>
     </div>
+    {also_html}
+    {other_section}
     {qw_html}
     <p style="font-size:.7rem;color:#aaa;margin-top:.8rem">{label}</p>
   </div>

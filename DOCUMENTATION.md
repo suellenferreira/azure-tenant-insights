@@ -672,6 +672,9 @@ Non-prescriptive by design: it surfaces *signals* and *opportunity indicators*, 
 ### Limitations
 ⚠️ INFERRED — no official Microsoft API returns modernization scores. Signals are indicative; validate against your architecture and standards.
 
+### AI Readiness boundaries
+ATI identifies AI service accounts, model deployments, and AI Foundry projects via Azure Resource Graph. Agent configurations, prompt flows, evaluations, and inter-service connections within Azure AI Foundry are managed internally by the Foundry service and are not visible from ARG. Use the Azure AI Foundry portal or SDK for detailed agent and workflow inventory.
+
 ---
 
 ## Item 12: Resiliency Posture Signals

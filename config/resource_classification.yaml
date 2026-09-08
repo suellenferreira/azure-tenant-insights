@@ -151,3 +151,7 @@ types:
   # Container Registry granularization
   microsoft.containerregistry/registries: { technical_category: "Compute - Containers - Registry", business_pillar: "Compute", service_model: "PaaS" }
   microsoft.containerregistry/registries/replications: { technical_category: "Compute - Containers - Registry Replication", business_pillar: "Compute", service_model: "PaaS" }
+  # AI Services granularization
+  microsoft.cognitiveservices/accounts: { technical_category: "AI & Machine Learning - AI Services", business_pillar: "AI", service_model: "PaaS" }
+  microsoft.cognitiveservices/accounts/deployments: { technical_category: "AI & Machine Learning - Model Deployments", business_pillar: "AI", service_model: "PaaS" }
+  microsoft.cognitiveservices/accounts/projects: { technical_category: "AI & Machine Learning - AI Foundry Projects", business_pillar: "AI", service_model: "PaaS" }

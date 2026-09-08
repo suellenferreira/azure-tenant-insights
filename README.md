@@ -674,6 +674,7 @@ For large tenants, consider using `--skip-advisor`, `--skip-policy`, or `--no-ht
 - **Charts require internet:** Chart.js is loaded from CDN. All data tables display without internet.
 - **Point-in-time only:** ATI produces snapshots. Trend analysis requires scheduling regular runs.
 - **Modernization signals are INFERRED:** No official Azure API returns an AI-readiness or modernization score. ATI infers these from detected resource types only.
+- **AI Foundry agent visibility:** ATI identifies AI service accounts, model deployments, and Foundry projects via ARG. Agent configurations, prompt flows, and inter-service connections within Foundry are not visible from ARG; use the Azure AI Foundry portal or SDK.
 
 ---
 

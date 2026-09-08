@@ -23,6 +23,36 @@ resource_types:
     description: "Microsoft Fabric F-SKU capacity."
     promoted_fields: []
 
+  "microsoft.cognitiveservices/accounts":
+    display_name: "AI Services Accounts"
+    promoted_fields:
+      - path: "kind"
+        column: "kind"
+      - path: "properties.endpoint"
+        column: "endpoint"
+      - path: "properties.provisioningState"
+        column: "provisioning_state"
+
+  "microsoft.cognitiveservices/accounts/deployments":
+    display_name: "AI Model Deployments"
+    promoted_fields:
+      - path: "properties.model.name"
+        column: "model_name"
+      - path: "properties.model.version"
+        column: "model_version"
+      - path: "properties.model.format"
+        column: "model_format"
+      - path: "properties.scaleSettings.scaleType"
+        column: "scale_type"
+      - path: "properties.provisioningState"
+        column: "provisioning_state"
+
+  "microsoft.cognitiveservices/accounts/projects":
+    display_name: "AI Foundry Projects"
+    promoted_fields:
+      - path: "properties.endpoint"
+        column: "endpoint"
+
   "microsoft.compute/virtualmachines":
     display_name: "Virtual Machines"
     promoted_fields:

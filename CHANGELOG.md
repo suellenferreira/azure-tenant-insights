@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**AI readiness enrichment**
+- Enriched resource classification with type-exact overrides for `cognitiveservices/accounts`, `accounts/deployments`, and `accounts/projects` (AI Services, Model Deployments, AI Foundry Projects).
+- Modernization processor now collects AI deployment counts by model name and Foundry project counts as evidence.
+- Foundry project counts are integrated into the AI family checklist label (e.g., `✓ OpenAI / AI Services (3, 2 Foundry projects)`).
+- AI deployment details (model names and counts) are presented in a collapsible `<details>` dropdown inside the card, replacing the previous inline deployment line.
+- Other Dimensions section split into two collapsible groups: **Established Adoption** (intermediate/high score, non-low confidence) and **Insufficient Data** (null score, low confidence, or context-only), each with descriptive legenda.
+- Both Executive and Technical HTML writers updated with the same presentation improvements.
+- Documented AI Readiness boundaries in DOCUMENTATION.md and README.md Limitations sections.
+
 **Cost Management retry and diagnostics**
 - Added bounded retries for `429` and transient `5xx` responses, honoring `Retry-After` with exponential fallback.
 - Cost warnings now include the HTTP status, Azure error code/message, attempt count, request ID, likely cause, and an actionable next step.

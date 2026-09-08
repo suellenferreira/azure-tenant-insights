@@ -305,6 +305,21 @@ def build_modernization_assessment(scan_data: dict) -> Dict[str, Any]:
             "framework_refs": dim.get("framework_refs", []),
         })
 
+    # Enrich AI dimension with model deployment counts
+    for result in results:
+        if result["id"] == "ai":
+            deployments = rbt.get("microsoft.cognitiveservices/accounts/deployments", [])
+            projects = rbt.get("microsoft.cognitiveservices/accounts/projects", [])
+            models: Dict[str, int] = {}
+            for dep in deployments:
+                props = dep.get("properties") if isinstance(dep.get("properties"), dict) else {}
+                model = (props.get("model") or {}).get("name") or "unknown"
+                models[model] = models.get(model, 0) + 1
+            result["evidence"]["deployments"] = len(deployments)
+            result["evidence"]["deployment_models"] = models
+            result["evidence"]["foundry_projects"] = len(projects)
+            break
+
     summary = _build_summary(results, rbt)
     return {
         "available": _total_resources(rbt) > 0 and bool(results),

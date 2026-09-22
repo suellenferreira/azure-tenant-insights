@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Cloud Shell guidance**
+- Fixed the Azure Cloud Shell quick start to create an isolated virtual environment before `pip install`, avoiding the system-Python permission error.
+- Documented writing reports to the persisted `~/clouddrive` share and a "Downloading your reports" section (zip-and-download plus the `download` command) across all four READMEs.
+
 **AI readiness enrichment**
 - Enriched resource classification with type-exact overrides for `cognitiveservices/accounts`, `accounts/deployments`, and `accounts/projects` (AI Services, Model Deployments, AI Foundry Projects).
 - Modernization processor now collects AI deployment counts by model name and Foundry project counts as evidence.

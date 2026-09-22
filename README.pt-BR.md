@@ -348,12 +348,37 @@ python invoke_ati.py --tenant-id <TENANT-ID> --debug
 ### Azure Cloud Shell
 
 ```bash
-# Python e az já vêm prontos (az já autenticado) — só instale as dependências Python:
+# Python e az já vêm prontos (az já autenticado).
 git clone https://github.com/suellenferreira/azure-tenant-insights.git
 cd azure-tenant-insights
+
+# Crie um ambiente isolado (evita o erro de permissão do Python do sistema).
+python3 -m venv .venv && source .venv/bin/activate
+
 pip install -r requirements.txt --quiet
-python invoke_ati.py
+
+# Grave os relatórios direto no file share persistido para sobreviver a resets de sessão.
+python invoke_ati.py --subscription-id <SUBSCRIPTION-ID> --output-dir ~/clouddrive/ATI
 ```
+
+#### Baixando seus relatórios
+
+O Cloud Shell só baixa arquivos que estejam no file share persistido (`~/clouddrive`). Os comandos acima já gravam lá. Para baixar tudo de uma vez:
+
+```bash
+# Junte todos os relatórios em um único arquivo e baixe-o.
+cd ~/clouddrive/ATI && zip -r ATI_reports.zip AzureTenantInsights
+download ATI_reports.zip
+```
+
+Prefere arquivos individuais? O comando embutido `download` aceita um caminho diretamente:
+
+```bash
+cd ~/clouddrive/ATI/AzureTenantInsights
+download <NOME-DO-RELATORIO>_Executive.html
+```
+
+> O diálogo gráfico **Gerenciar arquivos ▸ Baixar** exige um caminho totalmente qualificado (por exemplo `/home/<usuário>/clouddrive/ATI/AzureTenantInsights/<arquivo>`); o comando `download` evita ter que digitá-lo.
 
 ---
 
